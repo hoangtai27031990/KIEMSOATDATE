@@ -172,6 +172,11 @@
   .item-actions button{flex:1;padding:11px;min-height:42px;font-size:13px;border-radius:8px;border:1px solid var(--line);
     background:var(--bg);color:var(--ink);cursor:pointer;}
   .item-actions button.mark-done{border-color:var(--accent);color:var(--accent);}
+  .item-actions button.undo-done{border-color:var(--vang);color:var(--vang);}
+  .item-actions-secondary{display:flex;gap:8px;margin-top:8px;}
+  .item-actions-secondary button{flex:1;padding:9px;min-height:38px;font-size:12.5px;border-radius:8px;
+    border:1px solid var(--line);background:var(--bg);color:var(--ink-soft);cursor:pointer;}
+  .item-actions-secondary button.btn-delete{border-color:var(--do);color:var(--do);}
   .empty-state{text-align:center;color:var(--ink-soft);font-size:13.5px;padding:40px 20px;}
 
   /* ---- Report ---- */
@@ -252,7 +257,7 @@
     <main>
       <!-- TAB: Ghi nhận -->
       <section class="tabpanel active" id="tab-scan">
-        <h2 class="section-title">Ghi nhận hàng hóa</h2>
+        <h2 class="section-title" id="scan-section-title">Ghi nhận hàng hóa</h2>
         <div class="card">
           <div class="form-grid">
             <div class="field">
@@ -318,6 +323,7 @@
 
             <div class="error-text" id="scan-error"></div>
             <button class="btn btn-primary" id="btn-save-item">Lưu ghi nhận</button>
+            <button class="btn btn-ghost" id="btn-cancel-edit" type="button" style="display:none;">Hủy sửa</button>
           </div>
         </div>
       </section>
@@ -376,7 +382,7 @@
                   <option value="CHT">Cửa hàng trưởng</option>
                 </select>
               </div>
-              <div class="field"><label for="u-email">Email</label><input id="u-email" type="email" placeholder="Nhận cảnh báo HSD"></div>
+              <div class="field" id="wrap-u-email" style="display:none;"><label for="u-email">Email</label><input id="u-email" type="email" placeholder="Nhận cảnh báo HSD"></div>
             </div>
             <div class="error-text" id="user-error"></div>
             <button class="btn btn-primary" id="btn-add-user">Thêm nhân viên</button>
@@ -448,6 +454,13 @@ function clearSession(){ localStorage.removeItem('hsd_session'); }
 // ---------- Tiện ích ngày tháng ----------
 function toDate(str){ return str ? new Date(str + 'T00:00:00') : null; }
 function fmt(d){ return d.toLocaleDateString('vi-VN'); }
+// Định dạng dd/mm/yyyy có số 0 đứng đầu — dùng khi điền lại vào ô input ngày (khác
+// với fmt() ở trên chỉ dùng để HIỂN THỊ, vì toLocaleDateString không đảm bảo zero-pad
+// và ô input yêu cầu đúng 2 chữ số cho ngày/tháng để attachDateMask/parseDMY nhận đúng).
+function toDMY(d){
+  const day = String(d.getDate()).padStart(2,'0'), month = String(d.getMonth()+1).padStart(2,'0');
+  return `${day}/${month}/${d.getFullYear()}`;
+}
 function toISODate(d){
   const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
@@ -500,6 +513,7 @@ function computeLevel(nsx, hsd){
 // ---------- State ----------
 let currentUser = null;
 let hsdMode = 'full'; // 'full' | 'hsd-only' | 'nsx-only'
+let editingItemId = null; // null = đang ở chế độ "Ghi nhận mới"; có giá trị = đang sửa item này
 let activeFilter = 'all';
 let listSearchTerm = '';
 const LIST_PAGE_SIZE = 10;
@@ -619,7 +633,8 @@ function bindScanForm(){
   document.getElementById('btn-close-cam').addEventListener('click', closeCamera);
   document.getElementById('btn-torch-cam').addEventListener('click', toggleTorch);
 
-  document.getElementById('btn-save-item').addEventListener('click', saveNewItem);
+  document.getElementById('btn-save-item').addEventListener('click', submitItemForm);
+  document.getElementById('btn-cancel-edit').addEventListener('click', cancelEditItem);
 
   applyModeVisibility();
 }
@@ -704,7 +719,50 @@ function renderTimeline(el, nsx, hsd){
   `;
 }
 
-async function saveNewItem(){
+function resetScanForm(){
+  ['f-ma','f-ten','f-nsx','f-hsd','f-thang','f-soluong','f-ghichu'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-ten').dataset.sku = '';
+  document.getElementById('f-ten-sku-tag').innerHTML = '';
+  document.getElementById('date-timeline').style.display = 'none';
+  document.getElementById('hsd-calc-hint').textContent = '';
+}
+
+// Mở form ở chế độ SỬA cho 1 item đã ghi nhận sai — điền sẵn dữ liệu cũ, chuyển sang
+// tab "Ghi nhận" để người dùng chỉnh lại rồi bấm "Cập nhật" (không tạo dòng mới).
+function startEditItem(item){
+  editingItemId = item.id;
+  hsdMode = 'full';
+  document.querySelectorAll('.hsd-mode button').forEach(b => b.classList.toggle('active', b.dataset.mode === 'full'));
+  applyModeVisibility();
+
+  document.getElementById('f-ma').value = item.ma || '';
+  document.getElementById('f-ten').value = item.ten || '';
+  document.getElementById('f-ten').dataset.sku = item.sku || '';
+  document.getElementById('f-ten-sku-tag').innerHTML = item.sku ? `<span class="sku-tag">Mã SKU: ${escapeHtml(item.sku)}</span>` : '';
+  document.getElementById('f-nsx').value = toDMY(toDate(item.nsx));
+  document.getElementById('f-hsd').value = toDMY(toDate(item.hsd));
+  document.getElementById('f-soluong').value = item.soLuong;
+  document.getElementById('f-ghichu').value = item.ghiChu || '';
+  updateDatePreview();
+
+  document.getElementById('scan-section-title').textContent = 'Sửa ghi nhận';
+  document.getElementById('btn-save-item').textContent = 'Cập nhật';
+  document.getElementById('btn-cancel-edit').style.display = 'inline-block';
+  document.getElementById('scan-error').textContent = '';
+
+  document.querySelector('.tab-btn[data-tab="tab-scan"]').click();
+}
+
+function cancelEditItem(){
+  editingItemId = null;
+  resetScanForm();
+  document.getElementById('scan-section-title').textContent = 'Ghi nhận hàng hóa';
+  document.getElementById('btn-save-item').textContent = 'Lưu ghi nhận';
+  document.getElementById('btn-cancel-edit').style.display = 'none';
+  document.getElementById('scan-error').textContent = '';
+}
+
+async function submitItemForm(){
   const errEl = document.getElementById('scan-error');
   errEl.textContent = '';
   const ten = document.getElementById('f-ten').value.trim();
@@ -723,27 +781,33 @@ async function saveNewItem(){
     return;
   }
 
+  const isEditing = !!editingItemId;
+  const item = {
+    ma, sku: document.getElementById('f-ten').dataset.sku || '', ten, nsx, hsd,
+    soLuong: Number(soLuong),
+    ghiChu,
+  };
+
   const btn = document.getElementById('btn-save-item');
-  btn.disabled = true; btn.textContent = 'Đang lưu...';
+  btn.disabled = true; btn.textContent = isEditing ? 'Đang cập nhật...' : 'Đang lưu...';
   try{
-    const res = await apiPost('saveItem', { item: {
-      ma, sku: document.getElementById('f-ten').dataset.sku || '', ten, nsx, hsd,
-      soLuong: Number(soLuong),
-      ghiChu,
-    }});
+    const res = isEditing
+      ? await apiPost('editItem', { id: editingItemId, item })
+      : await apiPost('saveItem', { item });
     if(!res.ok){ errEl.textContent = res.message || res.error || 'Lưu thất bại. Thử lại.'; return; }
 
-    ['f-ma','f-ten','f-nsx','f-hsd','f-thang','f-soluong','f-ghichu'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('f-ten').dataset.sku = '';
-    document.getElementById('f-ten-sku-tag').innerHTML = '';
-    document.getElementById('date-timeline').style.display = 'none';
-    document.getElementById('hsd-calc-hint').textContent = '';
-    showToast('Đã lưu ghi nhận.');
+    const wasEditing = isEditing;
+    editingItemId = null;
+    resetScanForm();
+    document.getElementById('scan-section-title').textContent = 'Ghi nhận hàng hóa';
+    document.getElementById('btn-cancel-edit').style.display = 'none';
+    showToast(wasEditing ? 'Đã cập nhật ghi nhận.' : 'Đã lưu ghi nhận.');
     refreshItemsCache(); // cập nhật ngầm cho tab Danh sách/Báo cáo, không cần chờ
+    if(wasEditing) document.querySelector('.tab-btn[data-tab="tab-list"]').click();
   } catch(err){
     errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL.';
   } finally {
-    btn.disabled = false; btn.textContent = 'Lưu ghi nhận';
+    btn.disabled = false; btn.textContent = editingItemId ? 'Cập nhật' : 'Lưu ghi nhận';
   }
 }
 
@@ -1002,16 +1066,33 @@ function renderList(){
         ${it.ghiChu ? '<br>Ghi chú: ' + escapeHtml(it.ghiChu) : ''}
       </div>
       <div class="mini-track"><div class="mini-today" style="left:${pct}%;"></div></div>
+      ${it.trangThai !== 'daxuly' ? `
+      <div class="item-actions-secondary">
+        <button class="btn-edit" data-id="${it.id}">Sửa</button>
+        <button class="btn-delete" data-id="${it.id}">Xóa</button>
+      </div>` : ''}
       <div class="item-actions">
         ${it.trangThai !== 'daxuly'
           ? `<button class="mark-done" data-id="${it.id}">Đánh dấu đã xử lý</button>`
-          : `<button disabled>Đã xử lý</button>`}
+          : `<button class="undo-done" data-id="${it.id}">Hoàn tác (đã xử lý)</button>`}
       </div>
     </div>
   `;}).join('');
 
   container.querySelectorAll('.mark-done').forEach(btn => {
-    btn.addEventListener('click', () => markDone(btn.dataset.id, btn));
+    btn.addEventListener('click', () => confirmMarkDone(btn.dataset.id, btn));
+  });
+  container.querySelectorAll('.undo-done').forEach(btn => {
+    btn.addEventListener('click', () => confirmUndoDone(btn.dataset.id, btn));
+  });
+  container.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = itemsCache.find(it => it.id === btn.dataset.id);
+      if(item) startEditItem(item);
+    });
+  });
+  container.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', () => confirmDeleteItem(btn.dataset.id, btn));
   });
 
   if(pager){
@@ -1042,7 +1123,14 @@ function bindListPagination(){
   });
 }
 
-async function markDone(id, btn){
+// Yêu cầu xác nhận trước khi đánh dấu đã xử lý — bấm nhầm nút này trước đây không
+// có cách nào hoàn tác. Giờ vẫn có nút "Hoàn tác" ở dưới nếu lỡ xác nhận nhầm,
+// nhưng việc hỏi lại trước vẫn giúp tránh thao tác nhầm ngay từ đầu.
+async function confirmMarkDone(id, btn){
+  const item = itemsCache.find(it => it.id === id);
+  const ten = item ? item.ten : 'sản phẩm này';
+  if(!confirm(`Xác nhận đã xử lý "${ten}"?\n\nBạn vẫn có thể bấm "Hoàn tác" sau nếu bấm nhầm.`)) return;
+
   const originalText = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = 'Đang xử lý...'; }
   try{
@@ -1053,9 +1141,60 @@ async function markDone(id, btn){
       return;
     }
     await refreshItemsCache();
-    renderList(); // render lại toàn bộ danh sách nên nút sẽ tự chuyển thành "Đã xử lý" (disabled)
+    renderList();
     renderReport();
     showToast('Đã đánh dấu xử lý.');
+  } catch(err){
+    showToast('Không kết nối được backend.');
+    if(btn){ btn.disabled = false; btn.textContent = originalText; }
+  }
+}
+
+// Hoàn tác thao tác "Đánh dấu đã xử lý" nếu bấm nhầm (fix #7).
+async function confirmUndoDone(id, btn){
+  const item = itemsCache.find(it => it.id === id);
+  const ten = item ? item.ten : 'sản phẩm này';
+  if(!confirm(`Hoàn tác trạng thái "đã xử lý" cho "${ten}"? Sản phẩm sẽ quay lại danh sách cần theo dõi.`)) return;
+
+  const originalText = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Đang hoàn tác...'; }
+  try{
+    const res = await apiPost('undoDone', { id });
+    if(!res.ok){
+      showToast(res.message || res.error || 'Không hoàn tác được, thử lại.');
+      if(btn){ btn.disabled = false; btn.textContent = originalText; }
+      return;
+    }
+    await refreshItemsCache();
+    renderList();
+    renderReport();
+    showToast('Đã hoàn tác.');
+  } catch(err){
+    showToast('Không kết nối được backend.');
+    if(btn){ btn.disabled = false; btn.textContent = originalText; }
+  }
+}
+
+// Xóa hẳn 1 sản phẩm ghi nhận sai (fix #6) — chỉ áp dụng cho item CHƯA "đã xử lý"
+// (backend cũng chặn tương tự, kiểm tra ở đây chỉ để phản hồi UX nhanh hơn).
+async function confirmDeleteItem(id, btn){
+  const item = itemsCache.find(it => it.id === id);
+  const ten = item ? item.ten : 'sản phẩm này';
+  if(!confirm(`Xóa hẳn "${ten}" khỏi danh sách? Thao tác này KHÔNG thể hoàn tác.`)) return;
+
+  const originalText = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Đang xóa...'; }
+  try{
+    const res = await apiPost('deleteItem', { id });
+    if(!res.ok){
+      showToast(res.message || res.error || 'Không xóa được, thử lại.');
+      if(btn){ btn.disabled = false; btn.textContent = originalText; }
+      return;
+    }
+    await refreshItemsCache();
+    renderList();
+    renderReport();
+    showToast('Đã xóa.');
   } catch(err){
     showToast('Không kết nối được backend.');
     if(btn){ btn.disabled = false; btn.textContent = originalText; }
@@ -1221,6 +1360,17 @@ async function refreshUsersCache(){
 
 function bindUserManagement(){
   document.getElementById('btn-add-user').addEventListener('click', addNewUser);
+  // Chỉ CHT mới cần Email (để nhận cảnh báo HSD) — NV không còn được gửi email nữa
+  // nên ẩn hẳn ô này khi chọn vai trò Nhân viên, tránh nhập thừa/gây hiểu nhầm.
+  document.getElementById('u-vaitro').addEventListener('change', toggleUserEmailField);
+  toggleUserEmailField();
+}
+
+function toggleUserEmailField(){
+  const isCHT = document.getElementById('u-vaitro').value === 'CHT';
+  const wrap = document.getElementById('wrap-u-email');
+  wrap.style.display = isCHT ? 'flex' : 'none';
+  if(!isCHT) document.getElementById('u-email').value = '';
 }
 
 async function addNewUser(){
@@ -1232,8 +1382,13 @@ async function addNewUser(){
   const vaiTro = document.getElementById('u-vaitro').value;
   const email = document.getElementById('u-email').value.trim();
 
-  if(!manv || !pass || !ten || !email){
-    errEl.textContent = 'Vui lòng nhập đủ: Mã nhân viên, Mật khẩu, Họ tên, Email.';
+  if(!manv || !pass || !ten){
+    errEl.textContent = 'Vui lòng nhập đủ: Mã nhân viên, Mật khẩu, Họ tên.';
+    return;
+  }
+  // Chỉ CHT mới cần email (để nhận cảnh báo HSD) — NV không còn nhận email nữa.
+  if(vaiTro === 'CHT' && !email){
+    errEl.textContent = 'Vui lòng nhập Email cho tài khoản Cửa hàng trưởng (dùng để nhận cảnh báo HSD).';
     return;
   }
 
@@ -1261,7 +1416,7 @@ function renderUserList(){
   }
   wrap.innerHTML = usersCache.map(u => `
     <div class="cat-row">
-      <span>${escapeHtml(u.ten)}<br><span class="sku">${escapeHtml(u.manv)} · ${u.vaiTro === 'CHT' ? 'Cửa hàng trưởng' : 'Nhân viên'} · ${escapeHtml(u.email||'')}</span></span>
+      <span>${escapeHtml(u.ten)}<br><span class="sku">${escapeHtml(u.manv)} · ${u.vaiTro === 'CHT' ? 'Cửa hàng trưởng' : 'Nhân viên'}${u.email ? ' · ' + escapeHtml(u.email) : ''}</span></span>
       <button class="btn-reset-pw" data-manv="${escapeHtml(u.manv)}">Đổi mật khẩu</button>
     </div>
   `).join('');
