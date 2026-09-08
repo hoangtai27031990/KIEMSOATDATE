@@ -147,6 +147,10 @@
   .chip[data-level="vang"].active{color:var(--vang);background:var(--vang-bg);}
   .chip[data-level="xanh"].active{color:var(--xanh);background:var(--xanh-bg);}
   .chip[data-level="all"].active{color:var(--accent);background:var(--accent-soft);}
+  .pagination-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;}
+  .pagination-row .btn{padding:8px 14px;font-size:13px;}
+  .pagination-row .btn:disabled{opacity:0.4;pointer-events:none;}
+  .pagination-label{font-size:13px;color:var(--ink-soft);white-space:nowrap;}
 
   .item{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
     padding:14px;margin-bottom:10px;}
@@ -327,7 +331,11 @@
           <div class="chip" data-level="xanh">Còn xa</div>
         </div>
         <div id="list-container"></div>
-        <button id="btn-list-more" class="btn btn-ghost" style="width:100%;margin-top:12px;display:none;">Xem thêm</button>
+        <div id="list-pagination" class="pagination-row" style="display:none;">
+          <button id="btn-list-prev" class="btn btn-ghost" type="button">‹ Trước</button>
+          <span id="list-page-label" class="pagination-label"></span>
+          <button id="btn-list-next" class="btn btn-ghost" type="button">Sau ›</button>
+        </div>
       </section>
 
       <!-- TAB: Danh mục -->
@@ -490,8 +498,8 @@ let currentUser = null;
 let hsdMode = 'full'; // 'full' | 'hsd-only' | 'nsx-only'
 let activeFilter = 'all';
 let listSearchTerm = '';
-const LIST_PAGE_SIZE = 30;
-let listVisibleCount = LIST_PAGE_SIZE;
+const LIST_PAGE_SIZE = 10;
+let listCurrentPage = 1;
 let cameraStream = null;
 let barcodeDetector = null;
 let catalogCache = [];  // nạp lại sau khi đăng nhập / sau khi CHT upload danh mục
@@ -505,7 +513,7 @@ function init(){
   bindScanForm();
   bindFilters();
   bindListSearch();
-  bindListMore();
+  bindListPagination();
   bindExport();
   bindCatalogUpload();
   bindTenAutocomplete();
@@ -794,7 +802,7 @@ function bindFilters(){
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       activeFilter = chip.dataset.level;
-      listVisibleCount = LIST_PAGE_SIZE; // đổi bộ lọc thì quay lại trang đầu
+      listCurrentPage = 1; // đổi bộ lọc thì quay lại trang 1
       renderList();
     });
   });
@@ -807,7 +815,7 @@ function bindListSearch(){
   if(!input) return;
   input.addEventListener('input', () => {
     listSearchTerm = normalizeVN(input.value.trim());
-    listVisibleCount = LIST_PAGE_SIZE; // tìm kiếm mới thì quay lại trang đầu
+    listCurrentPage = 1; // tìm kiếm mới thì quay lại trang 1
     renderList();
   });
 }
@@ -822,7 +830,7 @@ function visibleItems(){
 
 function renderList(){
   const container = document.getElementById('list-container');
-  const moreBtn = document.getElementById('btn-list-more');
+  const pager = document.getElementById('list-pagination');
   let items = visibleItems().map(it => ({...it, ...computeLevel(it.nsx, it.hsd)}));
 
   if(activeFilter !== 'all') items = items.filter(it => it.level === activeFilter);
@@ -838,13 +846,18 @@ function renderList(){
 
   if(items.length === 0){
     container.innerHTML = '<div class="empty-state">Chưa có sản phẩm nào ở mục này.</div>';
-    if(moreBtn) moreBtn.style.display = 'none';
+    if(pager) pager.style.display = 'none';
     return;
   }
 
-  // Chỉ render tối đa listVisibleCount dòng mỗi lần — tránh render hàng trăm item
-  // cùng lúc trên điện thoại gây giật/lag. Bấm "Xem thêm" để nạp thêm 1 trang.
-  const visible = items.slice(0, listVisibleCount);
+  // Phân trang: mỗi trang tối đa LIST_PAGE_SIZE sản phẩm — tránh render hàng trăm
+  // item cùng lúc trên điện thoại gây giật/lag. Kẹp lại trang hiện tại trong khoảng
+  // hợp lệ, phòng trường hợp lọc/tìm kiếm làm tổng số trang giảm xuống dưới trang đang xem.
+  const totalPages = Math.max(1, Math.ceil(items.length / LIST_PAGE_SIZE));
+  if(listCurrentPage > totalPages) listCurrentPage = totalPages;
+  if(listCurrentPage < 1) listCurrentPage = 1;
+  const start = (listCurrentPage - 1) * LIST_PAGE_SIZE;
+  const visible = items.slice(start, start + LIST_PAGE_SIZE);
 
   const levelLabel = { do:'Mức 20% – khẩn', vang:'Mức 30%', xanh:'Còn xa' };
 
@@ -878,23 +891,31 @@ function renderList(){
     btn.addEventListener('click', () => markDone(btn.dataset.id, btn));
   });
 
-  if(moreBtn){
-    const remaining = items.length - visible.length;
-    if(remaining > 0){
-      moreBtn.style.display = 'block';
-      moreBtn.textContent = `Xem thêm (còn ${remaining})`;
+  if(pager){
+    if(totalPages > 1){
+      pager.style.display = 'flex';
+      document.getElementById('list-page-label').textContent = `Trang ${listCurrentPage} / ${totalPages}`;
+      document.getElementById('btn-list-prev').disabled = listCurrentPage <= 1;
+      document.getElementById('btn-list-next').disabled = listCurrentPage >= totalPages;
     } else {
-      moreBtn.style.display = 'none';
+      pager.style.display = 'none';
     }
   }
 }
 
-function bindListMore(){
-  const moreBtn = document.getElementById('btn-list-more');
-  if(!moreBtn) return;
-  moreBtn.addEventListener('click', () => {
-    listVisibleCount += LIST_PAGE_SIZE;
+function bindListPagination(){
+  const prevBtn = document.getElementById('btn-list-prev');
+  const nextBtn = document.getElementById('btn-list-next');
+  if(!prevBtn || !nextBtn) return;
+  prevBtn.addEventListener('click', () => {
+    listCurrentPage -= 1;
     renderList();
+    document.getElementById('list-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  nextBtn.addEventListener('click', () => {
+    listCurrentPage += 1;
+    renderList();
+    document.getElementById('list-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }
 
