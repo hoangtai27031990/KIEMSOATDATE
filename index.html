@@ -485,6 +485,8 @@ function bindLogin(){
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
     if(!manv || !pass){ errEl.textContent = 'Vui lòng nhập mã nhân viên và mật khẩu.'; return; }
+    const btn = document.getElementById('btn-login');
+    btn.disabled = true; btn.textContent = 'Đang đăng nhập...';
     try{
       const res = await apiPost('login', { manv, pass });
       if(!res.ok){ errEl.textContent = res.message || 'Sai mã nhân viên hoặc mật khẩu.'; return; }
@@ -493,6 +495,8 @@ function bindLogin(){
       enterApp();
     } catch(err){
       errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL trong code.';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Đăng nhập';
     }
   });
 
@@ -676,7 +680,7 @@ async function saveNewItem(){
       soLuong: Number(soLuong),
       ghiChu,
     }});
-    if(!res.ok){ errEl.textContent = 'Lưu thất bại. Thử lại.'; return; }
+    if(!res.ok){ errEl.textContent = res.message || res.error || 'Lưu thất bại. Thử lại.'; return; }
 
     ['f-ma','f-ten','f-nsx','f-hsd','f-thang','f-soluong','f-ghichu'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('f-ten').dataset.sku = '';
@@ -820,7 +824,7 @@ function renderList(){
 async function markDone(id){
   try{
     const res = await apiPost('markDone', { id });
-    if(!res.ok){ showToast('Không đánh dấu được, thử lại.'); return; }
+    if(!res.ok){ showToast(res.message || res.error || 'Không đánh dấu được, thử lại.'); return; }
     await refreshItemsCache();
     renderList();
     renderReport();
@@ -910,7 +914,7 @@ function bindCatalogUpload(){
 
         try{
           const res = await apiPost('uploadCatalog', { list: deduped });
-          if(!res.ok){ errEl.textContent = 'Tải lên thất bại, thử lại.'; return; }
+          if(!res.ok){ errEl.textContent = res.message || res.error || 'Tải lên thất bại, thử lại.'; return; }
           catalogCache = deduped;
           renderCatalogPreview();
           showToast(removedCount > 0
