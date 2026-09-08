@@ -201,9 +201,6 @@
       </div>
       <div class="error-text" id="login-error"></div>
       <button class="btn btn-primary" id="btn-login">Đăng nhập</button>
-      <p class="hint">Tài khoản demo: <b>CHT01</b> / <b>123456</b> (Cửa hàng trưởng) hoặc <b>NV01</b> / <b>123456</b> (Nhân viên).</p>
-      <button class="btn btn-ghost" id="btn-seed-nv">Đăng nhập nhanh: Nhân viên (NV01)</button>
-      <button class="btn btn-ghost" id="btn-seed-cht">Đăng nhập nhanh: CHT (CHT01)</button>
     </div>
   </div>
 
@@ -360,7 +357,7 @@
     <nav class="tabbar">
       <button class="tab-btn active" data-tab="tab-scan"><span class="dot"></span>Ghi nhận</button>
       <button class="tab-btn" data-tab="tab-list"><span class="dot"></span>Danh sách</button>
-      <button class="tab-btn" data-tab="tab-catalog"><span class="dot"></span>Danh mục</button>
+      <button class="tab-btn" data-tab="tab-catalog" id="nav-btn-catalog"><span class="dot"></span>Danh mục</button>
       <button class="tab-btn" data-tab="tab-report"><span class="dot"></span>Báo cáo</button>
       <button class="tab-btn" data-tab="tab-users" id="nav-btn-users"><span class="dot"></span>Nhân viên</button>
     </nav>
@@ -499,9 +496,6 @@ function bindLogin(){
     }
   });
 
-  document.getElementById('btn-seed-nv').addEventListener('click', () => quickLogin('NV01', '123456'));
-  document.getElementById('btn-seed-cht').addEventListener('click', () => quickLogin('CHT01', '123456'));
-
   document.getElementById('btn-logout').addEventListener('click', () => {
     if(currentUser && currentUser.token) apiPost('logout', {}).catch(() => {}); // fire-and-forget, không chặn UI
     clearSession();
@@ -511,21 +505,6 @@ function bindLogin(){
   });
 }
 
-// Đăng nhập nhanh bằng tài khoản demo có sẵn trong sheet Users (xem hướng dẫn deploy backend)
-async function quickLogin(manv, pass){
-  const errEl = document.getElementById('login-error');
-  errEl.textContent = '';
-  try{
-    const res = await apiPost('login', { manv, pass });
-    if(!res.ok){ errEl.textContent = 'Chưa có tài khoản demo này trong sheet Users — xem hướng dẫn trong backend-hsd.gs.'; return; }
-    currentUser = { ...res.user, token: res.token };
-    setSession(currentUser);
-    enterApp();
-  } catch(err){
-    errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL trong code.';
-  }
-}
-
 async function enterApp(){
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'flex';
@@ -533,6 +512,7 @@ async function enterApp(){
   document.getElementById('who-role').textContent = currentUser.vaiTro === 'CHT' ? 'Cửa hàng trưởng' : 'Nhân viên';
   document.getElementById('catalog-upload-card').style.display = currentUser.vaiTro === 'CHT' ? 'block' : 'none';
   document.getElementById('nav-btn-users').style.display = currentUser.vaiTro === 'CHT' ? 'flex' : 'none';
+  document.getElementById('nav-btn-catalog').style.display = currentUser.vaiTro === 'CHT' ? 'flex' : 'none';
   showToast('Đang tải dữ liệu...');
   await Promise.all([refreshItemsCache(), refreshCatalogCache()]);
   renderList();
@@ -790,7 +770,14 @@ function renderList(){
   let items = visibleItems().map(it => ({...it, ...computeLevel(it.nsx, it.hsd)}));
 
   if(activeFilter !== 'all') items = items.filter(it => it.level === activeFilter);
-  items.sort((a,b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999));
+  // Ưu tiên sản phẩm CẦN XỬ LÝ lên đầu danh sách: chưa xử lý trước, đã xử lý xuống cuối;
+  // trong nhóm chưa xử lý, sản phẩm có thời gian cần xử lý gần nhất (số ngày còn lại ít nhất) lên đầu.
+  items.sort((a, b) => {
+    const aDone = a.trangThai === 'daxuly' ? 1 : 0;
+    const bDone = b.trangThai === 'daxuly' ? 1 : 0;
+    if(aDone !== bDone) return aDone - bDone;
+    return (a.daysLeft ?? 999) - (b.daysLeft ?? 999);
+  });
 
   if(items.length === 0){
     container.innerHTML = '<div class="empty-state">Chưa có sản phẩm nào ở mục này.</div>';
