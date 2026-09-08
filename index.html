@@ -101,6 +101,9 @@
   #cam-wrap video{width:100%;display:block;max-height:220px;object-fit:cover;}
   #cam-wrap .cam-close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.5);color:#fff;border:none;
     border-radius:6px;padding:6px 10px;font-size:12px;}
+  #cam-wrap .cam-torch{position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.5);color:#fff;border:none;
+    border-radius:6px;padding:6px 10px;font-size:12px;}
+  #cam-wrap .cam-torch.on{background:var(--accent);}
   .scan-row{display:flex;gap:8px;}
   .scan-row input{flex:1;}
   .hint{font-size:12px;color:var(--ink-soft);margin-top:2px;}
@@ -260,6 +263,7 @@
               </div>
               <div id="cam-wrap">
                 <video id="cam-video" playsinline muted></video>
+                <button class="cam-torch" id="btn-torch-cam" type="button" style="display:none;">🔦 Đèn</button>
                 <button class="cam-close" id="btn-close-cam" type="button">Đóng</button>
               </div>
               <div class="hint" id="cam-hint"></div>
@@ -613,6 +617,7 @@ function bindScanForm(){
 
   document.getElementById('btn-open-cam').addEventListener('click', openCamera);
   document.getElementById('btn-close-cam').addEventListener('click', closeCamera);
+  document.getElementById('btn-torch-cam').addEventListener('click', toggleTorch);
 
   document.getElementById('btn-save-item').addEventListener('click', saveNewItem);
 
@@ -743,9 +748,25 @@ async function saveNewItem(){
 }
 
 // ---------- Camera / Barcode ----------
+// Ghi chú tối ưu cho Android (nơi đa số cửa hàng dùng điện thoại Android để quét):
+// - BarcodeDetector native được Chrome for Android hỗ trợ tốt nhất (qua Google Play
+//   Services), nhưng vẫn cần các bước dưới đây để quét ổn định trong môi trường kho/
+//   quầy hàng thực tế: ánh sáng yếu, camera không tự lấy nét mã vạch ở khoảng cách gần,
+//   quét liên tục làm nóng máy/tốn pin nếu không giới hạn tần suất.
+let scanActive = false;      // đang trong vòng lặp quét hay không (khác cameraStream: dùng để tạm dừng khi ẩn tab)
+let scanInFlight = false;    // đang chờ kết quả detect() -> tránh gọi chồng nhiều lần/giây
+let scanErrorStreak = 0;     // số lần detect() lỗi liên tiếp -> phát hiện thiết bị không hỗ trợ thực sự
+const SCAN_INTERVAL_MS = 180;      // giãn cách giữa các lần thử quét (đỡ tốn CPU/pin trên Android)
+const SCAN_MAX_ERROR_STREAK = 15;  // lỗi liên tiếp quá số này thì dừng hẳn, báo nhập tay
+let camVisibilityHandler = null;
+
 async function openCamera(){
   const wrap = document.getElementById('cam-wrap');
   const hint = document.getElementById('cam-hint');
+  const torchBtn = document.getElementById('btn-torch-cam');
+  hint.textContent = '';
+  torchBtn.style.display = 'none';
+  torchBtn.classList.remove('on');
   wrap.style.display = 'block';
 
   const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
@@ -759,40 +780,142 @@ async function openCamera(){
   }
 
   try{
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const video = document.getElementById('cam-video');
-    video.srcObject = cameraStream;
-    await video.play();
-
-    if('BarcodeDetector' in window){
-      barcodeDetector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','upc_a','upc_e'] });
-      scanLoop(video);
-    } else {
-      hint.textContent = 'Thiết bị/trình duyệt này chưa hỗ trợ tự nhận diện mã vạch (thường gặp trên iOS Safari). Vui lòng nhập mã bằng tay.';
-    }
+    // Yêu cầu độ phân giải đủ lớn (ideal, không ép cứng) — nhiều máy Android nếu chỉ
+    // truyền facingMode sẽ tự chọn độ phân giải thấp, làm mã vạch bị mờ/khó nhận diện.
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
   } catch(e){
-    hint.textContent = 'Không truy cập được camera (có thể do chưa cấp quyền). Vui lòng nhập mã bằng tay.';
+    // Thông báo cụ thể theo loại lỗi thay vì 1 câu chung chung — trên Android lỗi
+    // NotReadableError (camera đang bị app khác chiếm) khá phổ biến và dễ gây nhầm
+    // tưởng là "máy không hỗ trợ camera" nếu chỉ báo chung chung.
+    if(e && e.name === 'NotAllowedError'){
+      hint.textContent = 'Bạn chưa cấp quyền camera cho trang này. Vào cài đặt trình duyệt > Quyền trang web > Camera để bật lại, hoặc nhập mã bằng tay.';
+    } else if(e && e.name === 'NotFoundError'){
+      hint.textContent = 'Không tìm thấy camera trên thiết bị này. Vui lòng nhập mã bằng tay.';
+    } else if(e && e.name === 'NotReadableError'){
+      hint.textContent = 'Camera đang được ứng dụng khác sử dụng. Hãy đóng app đó rồi thử lại, hoặc nhập mã bằng tay.';
+    } else {
+      hint.textContent = 'Không truy cập được camera. Vui lòng nhập mã bằng tay.';
+    }
+    return;
   }
+
+  const video = document.getElementById('cam-video');
+  video.srcObject = cameraStream;
+  await video.play();
+
+  // Bật lấy nét liên tục (continuous autofocus) nếu camera hỗ trợ — mặc định nhiều
+  // camera sau trên Android quay video ở chế độ lấy nét cố định/xa, khiến mã vạch
+  // chụp gần bị mờ không nhận diện được.
+  const track = cameraStream.getVideoTracks()[0];
+  try{
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(caps.focusMode && caps.focusMode.includes('continuous')){
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    }
+    if(caps.torch){
+      torchBtn.style.display = 'block';
+    }
+  } catch(focusErr){
+    // Không phải lỗi nghiêm trọng — nếu thiết bị không hỗ trợ chỉnh lấy nét/đèn qua
+    // API này thì camera vẫn quét được bình thường ở chế độ mặc định.
+  }
+
+  if(!('BarcodeDetector' in window)){
+    hint.textContent = 'Thiết bị/trình duyệt này chưa hỗ trợ tự nhận diện mã vạch (thường gặp trên iOS Safari). Vui lòng nhập mã bằng tay.';
+    return;
+  }
+
+  barcodeDetector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','upc_a','upc_e'] });
+  scanErrorStreak = 0;
+  scanActive = true;
+  bindCamVisibilityHandling();
+  scanLoop(video);
 }
 
+// Giới hạn tần suất quét bằng setTimeout thay vì gọi detect() liên tục mỗi khung hình
+// (requestAnimationFrame ~60 lần/giây) — trên Android việc quét mã vạch bằng
+// BarcodeDetector nặng hơn nhiều so với các tác vụ đồ họa thông thường, gọi dồn dập
+// dễ làm máy nóng/tốn pin và có thể khiến nhiều lệnh detect() chạy chồng lên nhau.
 function scanLoop(video){
-  if(!cameraStream) return;
+  if(!scanActive || !cameraStream) return;
+  if(scanInFlight){
+    setTimeout(() => scanLoop(video), SCAN_INTERVAL_MS);
+    return;
+  }
+  scanInFlight = true;
   barcodeDetector.detect(video)
     .then(codes => {
+      scanInFlight = false;
+      scanErrorStreak = 0;
       if(codes.length > 0){
         document.getElementById('f-ma').value = codes[0].rawValue;
         closeCamera();
         showToast('Đã quét mã: ' + codes[0].rawValue);
-      } else if(cameraStream){
-        requestAnimationFrame(() => scanLoop(video));
+        return;
       }
+      if(scanActive) setTimeout(() => scanLoop(video), SCAN_INTERVAL_MS);
     })
-    .catch(() => { if(cameraStream) requestAnimationFrame(() => scanLoop(video)); });
+    .catch(() => {
+      scanInFlight = false;
+      scanErrorStreak += 1;
+      // Một số thiết bị Android báo hỗ trợ BarcodeDetector nhưng thực chất không chạy
+      // được (thiếu Google Play Services hoặc bản Chrome quá cũ) — nếu cứ lỗi liên
+      // tục thì dừng hẳn thay vì âm thầm quét vô tận, và báo người dùng nhập mã bằng tay.
+      if(scanErrorStreak >= SCAN_MAX_ERROR_STREAK){
+        const hint = document.getElementById('cam-hint');
+        if(hint) hint.textContent = 'Không thể nhận diện mã vạch trên thiết bị này. Vui lòng nhập mã bằng tay.';
+        closeCamera();
+        return;
+      }
+      if(scanActive) setTimeout(() => scanLoop(video), SCAN_INTERVAL_MS);
+    });
+}
+
+async function toggleTorch(){
+  if(!cameraStream) return;
+  const track = cameraStream.getVideoTracks()[0];
+  const btn = document.getElementById('btn-torch-cam');
+  const isOn = btn.classList.contains('on');
+  try{
+    await track.applyConstraints({ advanced: [{ torch: !isOn }] });
+    btn.classList.toggle('on', !isOn);
+  } catch(e){
+    // Thiết bị báo hỗ trợ torch nhưng bật lỗi (hiếm gặp) — bỏ qua, không chặn luồng quét.
+  }
+}
+
+// Tạm dừng vòng lặp quét khi người dùng chuyển sang app khác / khóa màn hình (rất hay
+// gặp trên Android khi đang cầm điện thoại đi lấy hàng), và quét tiếp khi quay lại —
+// tránh việc detect() vẫn chạy ngầm vô ích khi video không hiển thị.
+function bindCamVisibilityHandling(){
+  if(camVisibilityHandler) document.removeEventListener('visibilitychange', camVisibilityHandler);
+  camVisibilityHandler = () => {
+    if(!cameraStream) return;
+    const video = document.getElementById('cam-video');
+    if(document.hidden){
+      scanActive = false;
+    } else if(document.getElementById('cam-wrap').style.display !== 'none'){
+      scanActive = true;
+      scanErrorStreak = 0;
+      scanLoop(video);
+    }
+  };
+  document.addEventListener('visibilitychange', camVisibilityHandler);
 }
 
 function closeCamera(){
+  scanActive = false;
+  scanInFlight = false;
   if(cameraStream){ cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  if(camVisibilityHandler){ document.removeEventListener('visibilitychange', camVisibilityHandler); camVisibilityHandler = null; }
   document.getElementById('cam-wrap').style.display = 'none';
+  document.getElementById('btn-torch-cam').classList.remove('on');
 }
 
 // ---------- Danh sách ----------
