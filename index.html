@@ -317,6 +317,9 @@
       <!-- TAB: Danh sách -->
       <section class="tabpanel" id="tab-list">
         <h2 class="section-title">Danh sách hàng theo dõi</h2>
+        <div class="field" style="margin-bottom:10px;">
+          <input id="list-search" type="text" placeholder="Tìm theo tên hàng...">
+        </div>
         <div class="filter-row">
           <div class="chip active" data-level="all">Tất cả</div>
           <div class="chip" data-level="do">Mức 20% (khẩn)</div>
@@ -324,6 +327,7 @@
           <div class="chip" data-level="xanh">Còn xa</div>
         </div>
         <div id="list-container"></div>
+        <button id="btn-list-more" class="btn btn-ghost" style="width:100%;margin-top:12px;display:none;">Xem thêm</button>
       </section>
 
       <!-- TAB: Danh mục -->
@@ -485,6 +489,9 @@ function computeLevel(nsx, hsd){
 let currentUser = null;
 let hsdMode = 'full'; // 'full' | 'hsd-only' | 'nsx-only'
 let activeFilter = 'all';
+let listSearchTerm = '';
+const LIST_PAGE_SIZE = 30;
+let listVisibleCount = LIST_PAGE_SIZE;
 let cameraStream = null;
 let barcodeDetector = null;
 let catalogCache = [];  // nạp lại sau khi đăng nhập / sau khi CHT upload danh mục
@@ -497,6 +504,8 @@ function init(){
   bindTabs();
   bindScanForm();
   bindFilters();
+  bindListSearch();
+  bindListMore();
   bindExport();
   bindCatalogUpload();
   bindTenAutocomplete();
@@ -785,8 +794,21 @@ function bindFilters(){
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       activeFilter = chip.dataset.level;
+      listVisibleCount = LIST_PAGE_SIZE; // đổi bộ lọc thì quay lại trang đầu
       renderList();
     });
+  });
+}
+
+// Ô tìm kiếm theo tên hàng trong tab Danh sách (giống cách tìm trong Catalog),
+// giúp tìm nhanh 1 sản phẩm cụ thể thay vì cuộn qua cả trăm dòng.
+function bindListSearch(){
+  const input = document.getElementById('list-search');
+  if(!input) return;
+  input.addEventListener('input', () => {
+    listSearchTerm = normalizeVN(input.value.trim());
+    listVisibleCount = LIST_PAGE_SIZE; // tìm kiếm mới thì quay lại trang đầu
+    renderList();
   });
 }
 
@@ -800,9 +822,11 @@ function visibleItems(){
 
 function renderList(){
   const container = document.getElementById('list-container');
+  const moreBtn = document.getElementById('btn-list-more');
   let items = visibleItems().map(it => ({...it, ...computeLevel(it.nsx, it.hsd)}));
 
   if(activeFilter !== 'all') items = items.filter(it => it.level === activeFilter);
+  if(listSearchTerm) items = items.filter(it => normalizeVN(it.ten).includes(listSearchTerm));
   // Ưu tiên sản phẩm CẦN XỬ LÝ lên đầu danh sách: chưa xử lý trước, đã xử lý xuống cuối;
   // trong nhóm chưa xử lý, sản phẩm có thời gian cần xử lý gần nhất (số ngày còn lại ít nhất) lên đầu.
   items.sort((a, b) => {
@@ -814,12 +838,17 @@ function renderList(){
 
   if(items.length === 0){
     container.innerHTML = '<div class="empty-state">Chưa có sản phẩm nào ở mục này.</div>';
+    if(moreBtn) moreBtn.style.display = 'none';
     return;
   }
 
+  // Chỉ render tối đa listVisibleCount dòng mỗi lần — tránh render hàng trăm item
+  // cùng lúc trên điện thoại gây giật/lag. Bấm "Xem thêm" để nạp thêm 1 trang.
+  const visible = items.slice(0, listVisibleCount);
+
   const levelLabel = { do:'Mức 20% – khẩn', vang:'Mức 30%', xanh:'Còn xa' };
 
-  container.innerHTML = items.map(it => {
+  container.innerHTML = visible.map(it => {
     const nsxD = toDate(it.nsx), hsdD = toDate(it.hsd);
     const total = hsdD - nsxD;
     const today = new Date(); today.setHours(0,0,0,0);
@@ -847,6 +876,25 @@ function renderList(){
 
   container.querySelectorAll('.mark-done').forEach(btn => {
     btn.addEventListener('click', () => markDone(btn.dataset.id, btn));
+  });
+
+  if(moreBtn){
+    const remaining = items.length - visible.length;
+    if(remaining > 0){
+      moreBtn.style.display = 'block';
+      moreBtn.textContent = `Xem thêm (còn ${remaining})`;
+    } else {
+      moreBtn.style.display = 'none';
+    }
+  }
+}
+
+function bindListMore(){
+  const moreBtn = document.getElementById('btn-list-more');
+  if(!moreBtn) return;
+  moreBtn.addEventListener('click', () => {
+    listVisibleCount += LIST_PAGE_SIZE;
+    renderList();
   });
 }
 
