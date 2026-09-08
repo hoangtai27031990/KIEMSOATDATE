@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2E5339">
+<title>Quản lý HSD</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F5F6F4;
+    --surface:#FFFFFF;
+    --ink:#1C2321;
+    --ink-soft:#5B6560;
+    --line:#DDE2DE;
+    --accent:#2E5339;
+    --accent-soft:#E4ECE6;
+    --xanh:#2E7D4F;
+    --vang:#B8860B;
+    --do:#B3382C;
+    --xanh-bg:#EAF5EE;
+    --vang-bg:#FBF3DF;
+    --do-bg:#FBEAE7;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg);display:flex;flex-direction:column;}
+
+  /* ---- Login ---- */
+  #login-screen{flex:1;display:flex;flex-direction:column;justify-content:center;
+    padding:calc(32px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom));gap:20px;}
+  #login-screen h1{font-size:22px;margin:0 0 4px;letter-spacing:-0.01em;}
+  #login-screen p{color:var(--ink-soft);margin:0 0 12px;font-size:14px;line-height:1.5;}
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field label{font-size:13px;color:var(--ink-soft);}
+  .field input, .field select, .field textarea{
+    padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius);
+    font-size:16px;background:var(--surface);color:var(--ink);width:100%;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  .btn{
+    padding:13px 16px;border-radius:var(--radius);border:none;font-size:15px;font-weight:600;
+    cursor:pointer;text-align:center;
+  }
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:active{opacity:0.85;}
+  .btn-ghost{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+  .error-text{color:var(--do);font-size:13px;min-height:16px;}
+
+  /* ---- App shell ---- */
+  #app-screen{display:none;flex-direction:column;flex:1;}
+  header.topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:5;
+  }
+  header.topbar .who{font-size:14px;}
+  header.topbar .who b{display:block;font-size:15px;}
+  header.topbar button{background:none;border:none;color:var(--ink-soft);font-size:13px;cursor:pointer;}
+
+  main{flex:1;padding:16px;padding-bottom:calc(88px + env(safe-area-inset-bottom));}
+  .tabpanel{display:none;}
+  .tabpanel.active{display:block;}
+
+  nav.tabbar{
+    position:fixed;bottom:0;left:0;right:0;
+    max-width:480px;margin:0 auto;
+    background:var(--surface);border-top:1px solid var(--line);
+    display:flex;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.tabbar button{
+    flex:1;padding:13px 4px 11px;background:none;border:none;color:var(--ink-soft);
+    font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;
+    min-height:48px;
+  }
+  nav.tabbar button.active{color:var(--accent);font-weight:600;}
+  nav.tabbar .dot{width:6px;height:6px;border-radius:50%;background:transparent;}
+  nav.tabbar button.active .dot{background:var(--accent);}
+
+  h2.section-title{font-size:16px;margin:4px 0 14px;}
+
+  /* ---- Scan form ---- */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;}
+  .form-grid{display:flex;flex-direction:column;gap:14px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .hsd-mode{display:flex;gap:6px;margin-bottom:2px;flex-wrap:wrap;}
+  .hsd-mode button{
+    flex:1 1 30%;min-width:100px;padding:8px 6px;font-size:12px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink-soft);cursor:pointer;
+  }
+  .hsd-mode button.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:600;}
+  #cam-wrap{position:relative;border-radius:var(--radius);overflow:hidden;background:#000;display:none;}
+  #cam-wrap video{width:100%;display:block;max-height:220px;object-fit:cover;}
+  #cam-wrap .cam-close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.5);color:#fff;border:none;
+    border-radius:6px;padding:6px 10px;font-size:12px;}
+  .scan-row{display:flex;gap:8px;}
+  .scan-row input{flex:1;}
+  .hint{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---- Autocomplete tên hàng từ danh mục ---- */
+  .autocomplete-wrap{position:relative;}
+  .ac-list{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 6px 18px rgba(0,0,0,0.08);
+    max-height:220px;overflow-y:auto;z-index:10;display:none;}
+  .ac-list.show{display:block;}
+  .ac-item{padding:10px 14px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--line);}
+  .ac-item:last-child{border-bottom:none;}
+  .ac-item:hover, .ac-item.hi{background:var(--accent-soft);}
+  .ac-item .sku{font-size:11.5px;color:var(--ink-soft);}
+  .ac-empty{padding:10px 14px;font-size:13px;color:var(--ink-soft);}
+  .sku-tag{display:inline-block;margin-top:6px;font-size:11.5px;color:var(--accent);
+    background:var(--accent-soft);padding:2px 8px;border-radius:10px;}
+  .cat-row{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--line);}
+  .cat-row:last-child{border-bottom:none;}
+  .cat-row span.sku{color:var(--ink-soft);font-size:12px;}
+  .cat-row .btn-reset-pw{padding:5px 10px;font-size:12px;border-radius:8px;border:1px solid var(--line);
+    background:var(--bg);color:var(--accent);cursor:pointer;white-space:nowrap;}
+
+  /* ---- Timeline trực quan NSX -> mốc -> HSD ---- */
+  .date-timeline{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 14px 10px;margin-top:2px;}
+  .dt-labels{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;}
+  .dt-labels b{color:var(--ink);font-weight:600;}
+  .dt-track{position:relative;height:10px;border-radius:6px;overflow:visible;
+    background:linear-gradient(to right, var(--xanh) 0%, var(--xanh) 50%, var(--vang) 50%, var(--vang) 75%, var(--do) 75%, var(--do) 100%);}
+  .dt-today{position:absolute;top:-5px;width:2px;height:20px;background:var(--ink);}
+  .dt-today::after{content:'Hôm nay';position:absolute;top:-18px;left:50%;transform:translateX(-50%);
+    font-size:10.5px;color:var(--ink);white-space:nowrap;font-weight:600;}
+  .dt-legend{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-soft);margin-top:14px;}
+  .dt-result{text-align:center;font-size:13px;font-weight:600;margin-top:10px;}
+  .dt-result.xanh{color:var(--xanh);} .dt-result.vang{color:var(--vang);} .dt-result.do{color:var(--do);}
+
+  /* ---- List ---- */
+  .filter-row{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;}
+  .chip{padding:9px 14px;border-radius:20px;border:1px solid var(--line);background:var(--surface);
+    font-size:13px;white-space:nowrap;cursor:pointer;color:var(--ink-soft);min-height:38px;display:flex;align-items:center;}
+  .chip.active{border-color:currentColor;font-weight:600;}
+  .chip[data-level="do"].active{color:var(--do);background:var(--do-bg);}
+  .chip[data-level="vang"].active{color:var(--vang);background:var(--vang-bg);}
+  .chip[data-level="xanh"].active{color:var(--xanh);background:var(--xanh-bg);}
+  .chip[data-level="all"].active{color:var(--accent);background:var(--accent-soft);}
+
+  .item{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px;margin-bottom:10px;}
+  .item.done{opacity:0.55;}
+  .item-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .item-name{font-size:15px;font-weight:600;}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+  .badge.do{background:var(--do-bg);color:var(--do);}
+  .badge.vang{background:var(--vang-bg);color:var(--vang);}
+  .badge.xanh{background:var(--xanh-bg);color:var(--xanh);}
+  .item-meta{font-size:13px;color:var(--ink-soft);margin-top:4px;line-height:1.6;}
+  .mini-track{position:relative;height:6px;border-radius:4px;margin-top:10px;
+    background:linear-gradient(to right, var(--xanh) 0%, var(--xanh) 50%, var(--vang) 50%, var(--vang) 75%, var(--do) 75%, var(--do) 100%);}
+  .mini-today{position:absolute;top:-3px;width:2px;height:12px;background:var(--ink);border-radius:1px;}
+  .item-actions{display:flex;gap:8px;margin-top:10px;}
+  .item-actions button{flex:1;padding:11px;min-height:42px;font-size:13px;border-radius:8px;border:1px solid var(--line);
+    background:var(--bg);color:var(--ink);cursor:pointer;}
+  .item-actions button.mark-done{border-color:var(--accent);color:var(--accent);}
+  .empty-state{text-align:center;color:var(--ink-soft);font-size:13.5px;padding:40px 20px;}
+
+  /* ---- Report ---- */
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px;text-align:center;}
+  .stat b{display:block;font-size:20px;}
+  .stat span{font-size:12px;color:var(--ink-soft);}
+
+  .toast{
+    position:fixed;bottom:calc(96px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;
+    opacity:0;pointer-events:none;transition:opacity .25s;z-index:20;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- LOGIN -->
+  <div id="login-screen">
+    <div>
+      <h1>Quản lý HSD</h1>
+      <p>Theo dõi hạn sử dụng hàng hóa tại cửa hàng, cảnh báo khi hàng cận date.</p>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="login-manv">Mã nhân viên</label>
+        <input id="login-manv" placeholder="VD: NV0123" autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="login-pass">Mật khẩu</label>
+        <input id="login-pass" type="password" placeholder="••••••" autocomplete="current-password">
+      </div>
+      <div class="error-text" id="login-error"></div>
+      <button class="btn btn-primary" id="btn-login">Đăng nhập</button>
+      <p class="hint">Tài khoản demo: <b>CHT01</b> / <b>123456</b> (Cửa hàng trưởng) hoặc <b>NV01</b> / <b>123456</b> (Nhân viên).</p>
+      <button class="btn btn-ghost" id="btn-seed-nv">Đăng nhập nhanh: Nhân viên (NV01)</button>
+      <button class="btn btn-ghost" id="btn-seed-cht">Đăng nhập nhanh: CHT (CHT01)</button>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app-screen">
+    <header class="topbar">
+      <div class="who">
+        <b id="who-name">-</b>
+        <span id="who-role">-</span>
+      </div>
+      <button id="btn-logout">Đăng xuất</button>
+    </header>
+
+    <main>
+      <!-- TAB: Ghi nhận -->
+      <section class="tabpanel active" id="tab-scan">
+        <h2 class="section-title">Ghi nhận hàng hóa</h2>
+        <div class="card">
+          <div class="form-grid">
+            <div class="field">
+              <label for="f-ma">Mã / Barcode</label>
+              <div class="scan-row">
+                <input id="f-ma" placeholder="Quét hoặc nhập mã">
+                <button class="btn btn-ghost" id="btn-open-cam" type="button" style="flex:0 0 auto;">Quét</button>
+              </div>
+              <div id="cam-wrap">
+                <video id="cam-video" playsinline muted></video>
+                <button class="cam-close" id="btn-close-cam" type="button">Đóng</button>
+              </div>
+              <div class="hint" id="cam-hint"></div>
+            </div>
+
+            <div class="field">
+              <label for="f-ten">Tên hàng</label>
+              <div class="autocomplete-wrap">
+                <input id="f-ten" placeholder="Gõ để tìm trong danh mục..." autocomplete="off">
+                <div class="ac-list" id="f-ten-list"></div>
+              </div>
+              <div id="f-ten-sku-tag"></div>
+            </div>
+
+            <div class="field" id="wrap-nsx">
+              <label for="f-nsx">Ngày sản xuất (NSX)</label>
+              <input id="f-nsx" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy">
+            </div>
+
+            <div class="field">
+              <label>Cách nhập ngày</label>
+              <div class="hsd-mode">
+                <button type="button" class="active" data-mode="full">Có đủ NSX &amp; HSD</button>
+                <button type="button" data-mode="hsd-only">Chỉ có HSD</button>
+                <button type="button" data-mode="nsx-only">Chỉ có NSX</button>
+              </div>
+            </div>
+
+            <div class="field" id="wrap-hsd-date">
+              <label for="f-hsd">Hạn sử dụng (HSD)</label>
+              <input id="f-hsd" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy">
+            </div>
+
+            <div class="field" id="wrap-thang" style="display:none;">
+              <label for="f-thang" id="lbl-thang">Số tháng hạn dùng</label>
+              <input id="f-thang" type="number" min="1" placeholder="VD: 6">
+              <div class="hint" id="hsd-calc-hint"></div>
+            </div>
+
+            <div class="date-timeline" id="date-timeline" style="display:none;"></div>
+
+            <div class="row2">
+              <div class="field">
+                <label for="f-soluong">Số lượng</label>
+                <input id="f-soluong" type="number" min="1" placeholder="0">
+              </div>
+              <div class="field">
+                <label for="f-ghichu">Ghi chú (vị trí, lô...)</label>
+                <input id="f-ghichu" placeholder="Tùy chọn">
+              </div>
+            </div>
+
+            <div class="error-text" id="scan-error"></div>
+            <button class="btn btn-primary" id="btn-save-item">Lưu ghi nhận</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: Danh sách -->
+      <section class="tabpanel" id="tab-list">
+        <h2 class="section-title">Danh sách hàng theo dõi</h2>
+        <div class="filter-row">
+          <div class="chip active" data-level="all">Tất cả</div>
+          <div class="chip" data-level="do">Mức 20% (khẩn)</div>
+          <div class="chip" data-level="vang">Mức 30%</div>
+          <div class="chip" data-level="xanh">Còn xa</div>
+        </div>
+        <div id="list-container"></div>
+      </section>
+
+      <!-- TAB: Danh mục -->
+      <section class="tabpanel" id="tab-catalog">
+        <h2 class="section-title">Danh mục hàng hóa</h2>
+        <div class="card" id="catalog-upload-card" style="margin-bottom:14px;">
+          <div class="form-grid">
+            <p class="hint" style="margin:0;">Tải lên file danh mục/tồn kho (.xlsx hoặc .csv) — hệ thống tự nhận diện cột <b>SKU</b> và <b>Tên Hàng</b> theo tiêu đề cột, không cần đúng thứ tự cột hay chỉnh sửa file gốc (VD: dùng được ngay file xuất từ hệ thống tồn kho).</p>
+            <input type="file" id="catalog-file" accept=".csv,.xlsx,.xls">
+            <div class="error-text" id="catalog-error"></div>
+          </div>
+        </div>
+        <div class="card">
+          <p class="hint" style="margin:0 0 8px;">Đang có <b id="catalog-count">0</b> mặt hàng trong danh mục.</p>
+          <div id="catalog-preview"></div>
+        </div>
+      </section>
+
+      <!-- TAB: Nhân viên (chỉ CHT) -->
+      <section class="tabpanel" id="tab-users">
+        <h2 class="section-title">Quản lý nhân viên</h2>
+        <div class="card" style="margin-bottom:14px;">
+          <div class="form-grid">
+            <div class="row2">
+              <div class="field"><label for="u-manv">Mã nhân viên</label><input id="u-manv" placeholder="VD: NV02"></div>
+              <div class="field"><label for="u-pass">Mật khẩu</label><input id="u-pass" placeholder="Đặt mật khẩu"></div>
+            </div>
+            <div class="field"><label for="u-ten">Họ tên</label><input id="u-ten" placeholder="Họ tên nhân viên"></div>
+            <div class="row2">
+              <div class="field">
+                <label for="u-vaitro">Vai trò</label>
+                <select id="u-vaitro">
+                  <option value="NV">Nhân viên</option>
+                  <option value="CHT">Cửa hàng trưởng</option>
+                </select>
+              </div>
+              <div class="field"><label for="u-email">Email</label><input id="u-email" type="email" placeholder="Nhận cảnh báo HSD"></div>
+            </div>
+            <div class="error-text" id="user-error"></div>
+            <button class="btn btn-primary" id="btn-add-user">Thêm nhân viên</button>
+          </div>
+        </div>
+        <div class="card"><div id="user-list"></div></div>
+      </section>
+
+      <!-- TAB: Báo cáo -->
+      <section class="tabpanel" id="tab-report">
+        <h2 class="section-title">Báo cáo</h2>
+        <div class="stat-grid">
+          <div class="stat"><b id="stat-total">0</b><span>Tổng SP</span></div>
+          <div class="stat"><b id="stat-alert">0</b><span>Đang cảnh báo</span></div>
+          <div class="stat"><b id="stat-done">0</b><span>Đã xử lý</span></div>
+        </div>
+        <button class="btn btn-primary" id="btn-export" style="width:100%;">Xuất CSV (mở được bằng Excel)</button>
+        <p class="hint" style="margin-top:10px;">Báo cáo hiện lấy theo phạm vi dữ liệu bạn đang xem (CHT: toàn cửa hàng, nhân viên: phần đã ghi nhận).</p>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button class="tab-btn active" data-tab="tab-scan"><span class="dot"></span>Ghi nhận</button>
+      <button class="tab-btn" data-tab="tab-list"><span class="dot"></span>Danh sách</button>
+      <button class="tab-btn" data-tab="tab-catalog"><span class="dot"></span>Danh mục</button>
+      <button class="tab-btn" data-tab="tab-report"><span class="dot"></span>Báo cáo</button>
+      <button class="tab-btn" data-tab="tab-users" id="nav-btn-users"><span class="dot"></span>Nhân viên</button>
+    </nav>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   CẤU HÌNH BACKEND
+   - Dán URL Web App (Apps Script) đã deploy vào API_URL bên dưới.
+   - Toàn bộ dữ liệu (users, catalog, items) giờ lấy/lưu qua API này,
+     không còn dùng localStorage cho dữ liệu nghiệp vụ — chỉ session
+     đăng nhập hiện tại vẫn lưu localStorage để khỏi phải đăng nhập lại.
+===================================================================== */
+
+const API_URL = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE'; // VD: https://script.google.com/macros/s/xxxx/exec
+
+async function apiGet(action, params){
+  const url = new URL(API_URL);
+  url.searchParams.set('action', action);
+  url.searchParams.set('token', (currentUser && currentUser.token) || '');
+  if(params) Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  const res = await fetch(url);
+  return res.json();
+}
+async function apiPost(action, payload){
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // tránh CORS preflight với Apps Script
+    body: JSON.stringify({ action, token: (currentUser && currentUser.token) || '', ...payload })
+  });
+  return res.json();
+}
+
+function getSession(){
+  const raw = localStorage.getItem('hsd_session');
+  return raw ? JSON.parse(raw) : null;
+}
+function setSession(user){ localStorage.setItem('hsd_session', JSON.stringify(user)); }
+function clearSession(){ localStorage.removeItem('hsd_session'); }
+
+// ---------- Tiện ích ngày tháng ----------
+function toDate(str){ return str ? new Date(str + 'T00:00:00') : null; }
+function fmt(d){ return d.toLocaleDateString('vi-VN'); }
+function toISODate(d){
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function parseDMY(str){
+  if(!str) return null;
+  const m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(!m) return null;
+  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+  if(month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const d = new Date(year, month - 1, day);
+  d.setHours(0,0,0,0);
+  if(d.getMonth() !== month - 1) return null; // ngày không hợp lệ, VD 31/02
+  return d;
+}
+function attachDateMask(id){
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    const digits = el.value.replace(/\D/g,'').slice(0,8);
+    const day = digits.slice(0,2), month = digits.slice(2,4), year = digits.slice(4,8);
+    let out = day;
+    if(month) out += '/' + month;
+    if(year) out += '/' + year;
+    el.value = out;
+    updateDatePreview();
+  });
+}
+function addMonthsKeepDay(date, months){
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + Number(months));
+  return d;
+}
+function daysBetween(a, b){ return Math.round((b - a) / 86400000); }
+
+// Công thức: THSD = HSD - NSX
+// Mốc 1 (mức 30%): HSD - THSD*30%   |  Mốc 2 (mức 20%, khẩn hơn): HSD - THSD*20%
+function computeLevel(nsx, hsd){
+  const nsxD = toDate(nsx), hsdD = toDate(hsd);
+  if(!nsxD || !hsdD) return { level:'xanh', daysLeft:null, moc30:null, moc20:null };
+  const thsdMs = hsdD - nsxD;
+  const moc30 = new Date(hsdD.getTime() - thsdMs*0.30);
+  const moc20 = new Date(hsdD.getTime() - thsdMs*0.20);
+  const today = new Date(); today.setHours(0,0,0,0);
+  let level = 'xanh';
+  if(today >= moc20) level = 'do';
+  else if(today >= moc30) level = 'vang';
+  return { level, daysLeft: daysBetween(today, hsdD), moc30, moc20 };
+}
+
+// ---------- State ----------
+let currentUser = null;
+let hsdMode = 'full'; // 'full' | 'hsd-only' | 'nsx-only'
+let activeFilter = 'all';
+let cameraStream = null;
+let barcodeDetector = null;
+let catalogCache = [];  // nạp lại sau khi đăng nhập / sau khi CHT upload danh mục
+let itemsCache = [];    // nạp lại sau khi đăng nhập / sau khi lưu / đánh dấu xử lý
+let usersCache = [];    // nạp lại khi CHT mở tab Nhân viên
+
+// ---------- Init ----------
+function init(){
+  bindLogin();
+  bindTabs();
+  bindScanForm();
+  bindFilters();
+  bindExport();
+  bindCatalogUpload();
+  bindTenAutocomplete();
+  bindUserManagement();
+  const s = getSession();
+  if(s){ currentUser = s; enterApp(); }
+}
+
+// ---------- Login ----------
+function bindLogin(){
+  document.getElementById('btn-login').addEventListener('click', async () => {
+    const manv = document.getElementById('login-manv').value.trim();
+    const pass = document.getElementById('login-pass').value;
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    if(!manv || !pass){ errEl.textContent = 'Vui lòng nhập mã nhân viên và mật khẩu.'; return; }
+    try{
+      const res = await apiPost('login', { manv, pass });
+      if(!res.ok){ errEl.textContent = res.message || 'Sai mã nhân viên hoặc mật khẩu.'; return; }
+      currentUser = { ...res.user, token: res.token };
+      setSession(currentUser);
+      enterApp();
+    } catch(err){
+      errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL trong code.';
+    }
+  });
+
+  document.getElementById('btn-seed-nv').addEventListener('click', () => quickLogin('NV01', '123456'));
+  document.getElementById('btn-seed-cht').addEventListener('click', () => quickLogin('CHT01', '123456'));
+
+  document.getElementById('btn-logout').addEventListener('click', () => {
+    if(currentUser && currentUser.token) apiPost('logout', {}).catch(() => {}); // fire-and-forget, không chặn UI
+    clearSession();
+    currentUser = null;
+    document.getElementById('app-screen').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  });
+}
+
+// Đăng nhập nhanh bằng tài khoản demo có sẵn trong sheet Users (xem hướng dẫn deploy backend)
+async function quickLogin(manv, pass){
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  try{
+    const res = await apiPost('login', { manv, pass });
+    if(!res.ok){ errEl.textContent = 'Chưa có tài khoản demo này trong sheet Users — xem hướng dẫn trong backend-hsd.gs.'; return; }
+    currentUser = { ...res.user, token: res.token };
+    setSession(currentUser);
+    enterApp();
+  } catch(err){
+    errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL trong code.';
+  }
+}
+
+async function enterApp(){
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'flex';
+  document.getElementById('who-name').textContent = currentUser.ten;
+  document.getElementById('who-role').textContent = currentUser.vaiTro === 'CHT' ? 'Cửa hàng trưởng' : 'Nhân viên';
+  document.getElementById('catalog-upload-card').style.display = currentUser.vaiTro === 'CHT' ? 'block' : 'none';
+  document.getElementById('nav-btn-users').style.display = currentUser.vaiTro === 'CHT' ? 'flex' : 'none';
+  showToast('Đang tải dữ liệu...');
+  await Promise.all([refreshItemsCache(), refreshCatalogCache()]);
+  renderList();
+  renderReport();
+  renderCatalogPreview();
+}
+
+async function refreshItemsCache(){
+  try{ itemsCache = await apiGet('getItems'); if(!Array.isArray(itemsCache)) itemsCache = []; }
+  catch(err){ itemsCache = []; showToast('Không tải được danh sách từ backend.'); }
+}
+async function refreshCatalogCache(){
+  try{ catalogCache = await apiGet('getCatalog'); if(!Array.isArray(catalogCache)) catalogCache = []; }
+  catch(err){ catalogCache = []; }
+}
+
+// ---------- Tabs ----------
+function bindTabs(){
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+      if(btn.dataset.tab === 'tab-list'){ await refreshItemsCache(); renderList(); }
+      if(btn.dataset.tab === 'tab-report'){ await refreshItemsCache(); renderReport(); }
+      if(btn.dataset.tab === 'tab-catalog'){ await refreshCatalogCache(); renderCatalogPreview(); }
+      if(btn.dataset.tab === 'tab-users'){ await refreshUsersCache(); renderUserList(); }
+    });
+  });
+}
+
+// ---------- Scan form ----------
+function bindScanForm(){
+  document.querySelectorAll('.hsd-mode button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.hsd-mode button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      hsdMode = btn.dataset.mode; // 'full' | 'hsd-only' | 'nsx-only'
+      applyModeVisibility();
+      updateDatePreview();
+    });
+  });
+
+  attachDateMask('f-nsx');
+  attachDateMask('f-hsd');
+  document.getElementById('f-thang').addEventListener('input', updateDatePreview);
+
+  document.getElementById('btn-open-cam').addEventListener('click', openCamera);
+  document.getElementById('btn-close-cam').addEventListener('click', closeCamera);
+
+  document.getElementById('btn-save-item').addEventListener('click', saveNewItem);
+
+  applyModeVisibility();
+}
+
+function applyModeVisibility(){
+  const wrapNsx = document.getElementById('wrap-nsx');
+  const wrapHsd = document.getElementById('wrap-hsd-date');
+  const wrapThang = document.getElementById('wrap-thang');
+  const lblThang = document.getElementById('lbl-thang');
+
+  if(hsdMode === 'full'){
+    wrapNsx.style.display = 'flex';
+    wrapHsd.style.display = 'flex';
+    wrapThang.style.display = 'none';
+  } else if(hsdMode === 'nsx-only'){
+    wrapNsx.style.display = 'flex';
+    wrapHsd.style.display = 'none';
+    wrapThang.style.display = 'flex';
+    lblThang.textContent = 'Số tháng hạn dùng (để tính HSD)';
+  } else { // hsd-only
+    wrapNsx.style.display = 'none';
+    wrapHsd.style.display = 'flex';
+    wrapThang.style.display = 'flex';
+    lblThang.textContent = 'Số tháng hạn dùng (để tính NSX)';
+  }
+}
+
+// Trả về {nsx, hsd} dạng 'YYYY-MM-DD' hoặc null nếu chưa đủ/sai định dạng
+function resolveDates(){
+  const nsxRaw = document.getElementById('f-nsx').value;
+  const hsdRaw = document.getElementById('f-hsd').value;
+  const thang = document.getElementById('f-thang').value;
+
+  if(hsdMode === 'full'){
+    const nsxD = parseDMY(nsxRaw), hsdD = parseDMY(hsdRaw);
+    if(!nsxD || !hsdD) return null;
+    return { nsx: toISODate(nsxD), hsd: toISODate(hsdD) };
+  }
+  if(hsdMode === 'nsx-only'){
+    const nsxD = parseDMY(nsxRaw);
+    if(!nsxD || !thang) return null;
+    const hsdD = addMonthsKeepDay(nsxD, thang);
+    return { nsx: toISODate(nsxD), hsd: toISODate(hsdD) };
+  }
+  // hsd-only: NSX = HSD lùi lại số tháng
+  const hsdD = parseDMY(hsdRaw);
+  if(!hsdD || !thang) return null;
+  const nsxD = addMonthsKeepDay(hsdD, -Number(thang));
+  return { nsx: toISODate(nsxD), hsd: toISODate(hsdD) };
+}
+
+function updateDatePreview(){
+  const hint = document.getElementById('hsd-calc-hint');
+  const timeline = document.getElementById('date-timeline');
+  const dates = resolveDates();
+
+  if(hsdMode === 'nsx-only' && dates) hint.textContent = `HSD tính ra: ${fmt(toDate(dates.hsd))}`;
+  else if(hsdMode === 'hsd-only' && dates) hint.textContent = `NSX tính ra: ${fmt(toDate(dates.nsx))}`;
+  else hint.textContent = '';
+
+  if(!dates){ timeline.style.display = 'none'; return; }
+  renderTimeline(timeline, dates.nsx, dates.hsd);
+}
+
+function renderTimeline(el, nsx, hsd){
+  const info = computeLevel(nsx, hsd);
+  const nsxD = toDate(nsx), hsdD = toDate(hsd);
+  const total = hsdD - nsxD;
+  if(total <= 0){ el.style.display = 'none'; return; }
+  const today = new Date(); today.setHours(0,0,0,0);
+  let pct = ((today - nsxD) / total) * 100;
+  pct = Math.max(0, Math.min(100, pct));
+
+  const resultText = { xanh:'Còn xa hạn', vang:'Đã tới mốc 30% – cần theo dõi', do:'Đã tới mốc 20% – cần xử lý gấp' };
+
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="dt-labels"><span>NSX<br><b>${fmt(nsxD)}</b></span><span style="text-align:right;">HSD<br><b>${fmt(hsdD)}</b></span></div>
+    <div class="dt-track"><div class="dt-today" style="left:${pct}%;"></div></div>
+    <div class="dt-legend"><span>Còn xa</span><span>Mốc 30%</span><span>Mốc 20%</span></div>
+    <div class="dt-result ${info.level}">${resultText[info.level]} — còn ${info.daysLeft} ngày</div>
+  `;
+}
+
+async function saveNewItem(){
+  const errEl = document.getElementById('scan-error');
+  errEl.textContent = '';
+  const ten = document.getElementById('f-ten').value.trim();
+  const ma = document.getElementById('f-ma').value.trim();
+  const dates = resolveDates();
+  const soLuong = document.getElementById('f-soluong').value;
+  const ghiChu = document.getElementById('f-ghichu').value.trim();
+
+  if(!ten || !dates || !soLuong){
+    errEl.textContent = 'Vui lòng nhập đủ: Tên hàng, ngày theo chế độ đã chọn, Số lượng.';
+    return;
+  }
+  const { nsx, hsd } = dates;
+  if(toDate(hsd) <= toDate(nsx)){
+    errEl.textContent = 'HSD phải sau NSX.';
+    return;
+  }
+
+  const btn = document.getElementById('btn-save-item');
+  btn.disabled = true; btn.textContent = 'Đang lưu...';
+  try{
+    const res = await apiPost('saveItem', { item: {
+      ma, sku: document.getElementById('f-ten').dataset.sku || '', ten, nsx, hsd,
+      soLuong: Number(soLuong),
+      ghiChu,
+    }});
+    if(!res.ok){ errEl.textContent = 'Lưu thất bại. Thử lại.'; return; }
+
+    ['f-ma','f-ten','f-nsx','f-hsd','f-thang','f-soluong','f-ghichu'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('f-ten').dataset.sku = '';
+    document.getElementById('f-ten-sku-tag').innerHTML = '';
+    document.getElementById('date-timeline').style.display = 'none';
+    document.getElementById('hsd-calc-hint').textContent = '';
+    showToast('Đã lưu ghi nhận.');
+    refreshItemsCache(); // cập nhật ngầm cho tab Danh sách/Báo cáo, không cần chờ
+  } catch(err){
+    errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Lưu ghi nhận';
+  }
+}
+
+// ---------- Camera / Barcode ----------
+async function openCamera(){
+  const wrap = document.getElementById('cam-wrap');
+  const hint = document.getElementById('cam-hint');
+  wrap.style.display = 'block';
+
+  const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+  if(!isSecure){
+    hint.textContent = 'Camera chỉ hoạt động khi mở qua địa chỉ https:// (không hoạt động khi mở file trực tiếp trên máy). Vui lòng nhập mã bằng tay, hoặc host file này lên web qua https.';
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    hint.textContent = 'Trình duyệt này không hỗ trợ camera. Vui lòng nhập mã bằng tay.';
+    return;
+  }
+
+  try{
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('cam-video');
+    video.srcObject = cameraStream;
+    await video.play();
+
+    if('BarcodeDetector' in window){
+      barcodeDetector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','upc_a','upc_e'] });
+      scanLoop(video);
+    } else {
+      hint.textContent = 'Thiết bị/trình duyệt này chưa hỗ trợ tự nhận diện mã vạch (thường gặp trên iOS Safari). Vui lòng nhập mã bằng tay.';
+    }
+  } catch(e){
+    hint.textContent = 'Không truy cập được camera (có thể do chưa cấp quyền). Vui lòng nhập mã bằng tay.';
+  }
+}
+
+function scanLoop(video){
+  if(!cameraStream) return;
+  barcodeDetector.detect(video)
+    .then(codes => {
+      if(codes.length > 0){
+        document.getElementById('f-ma').value = codes[0].rawValue;
+        closeCamera();
+        showToast('Đã quét mã: ' + codes[0].rawValue);
+      } else if(cameraStream){
+        requestAnimationFrame(() => scanLoop(video));
+      }
+    })
+    .catch(() => { if(cameraStream) requestAnimationFrame(() => scanLoop(video)); });
+}
+
+function closeCamera(){
+  if(cameraStream){ cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  document.getElementById('cam-wrap').style.display = 'none';
+}
+
+// ---------- Danh sách ----------
+function bindFilters(){
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeFilter = chip.dataset.level;
+      renderList();
+    });
+  });
+}
+
+function visibleItems(){
+  let items = itemsCache;
+  if(currentUser.vaiTro !== 'CHT'){
+    items = items.filter(it => it.nhanVienId === currentUser.manv);
+  }
+  return items;
+}
+
+function renderList(){
+  const container = document.getElementById('list-container');
+  let items = visibleItems().map(it => ({...it, ...computeLevel(it.nsx, it.hsd)}));
+
+  if(activeFilter !== 'all') items = items.filter(it => it.level === activeFilter);
+  items.sort((a,b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999));
+
+  if(items.length === 0){
+    container.innerHTML = '<div class="empty-state">Chưa có sản phẩm nào ở mục này.</div>';
+    return;
+  }
+
+  const levelLabel = { do:'Mức 20% – khẩn', vang:'Mức 30%', xanh:'Còn xa' };
+
+  container.innerHTML = items.map(it => {
+    const nsxD = toDate(it.nsx), hsdD = toDate(it.hsd);
+    const total = hsdD - nsxD;
+    const today = new Date(); today.setHours(0,0,0,0);
+    let pct = total > 0 ? ((today - nsxD) / total) * 100 : 100;
+    pct = Math.max(0, Math.min(100, pct));
+    return `
+    <div class="item ${it.trangThai === 'daxuly' ? 'done' : ''}">
+      <div class="item-top">
+        <div class="item-name">${escapeHtml(it.ten)}</div>
+        <span class="badge ${it.level}">${levelLabel[it.level]}</span>
+      </div>
+      <div class="item-meta">
+        SL: ${it.soLuong} &nbsp;•&nbsp; NSX: ${fmt(nsxD)} &nbsp;•&nbsp; HSD: ${fmt(hsdD)}<br>
+        Còn lại: ${it.daysLeft} ngày &nbsp;•&nbsp; Người ghi nhận: ${escapeHtml(it.nhanVienTen)}
+        ${it.ghiChu ? '<br>Ghi chú: ' + escapeHtml(it.ghiChu) : ''}
+      </div>
+      <div class="mini-track"><div class="mini-today" style="left:${pct}%;"></div></div>
+      <div class="item-actions">
+        ${it.trangThai !== 'daxuly'
+          ? `<button class="mark-done" data-id="${it.id}">Đánh dấu đã xử lý</button>`
+          : `<button disabled>Đã xử lý</button>`}
+      </div>
+    </div>
+  `;}).join('');
+
+  container.querySelectorAll('.mark-done').forEach(btn => {
+    btn.addEventListener('click', () => markDone(btn.dataset.id));
+  });
+}
+
+async function markDone(id){
+  try{
+    const res = await apiPost('markDone', { id });
+    if(!res.ok){ showToast('Không đánh dấu được, thử lại.'); return; }
+    await refreshItemsCache();
+    renderList();
+    renderReport();
+    showToast('Đã đánh dấu xử lý.');
+  } catch(err){
+    showToast('Không kết nối được backend.');
+  }
+}
+
+// ---------- Báo cáo ----------
+function renderReport(){
+  const items = visibleItems().map(it => ({...it, ...computeLevel(it.nsx, it.hsd)}));
+  document.getElementById('stat-total').textContent = items.length;
+  document.getElementById('stat-alert').textContent = items.filter(it => it.level !== 'xanh' && it.trangThai !== 'daxuly').length;
+  document.getElementById('stat-done').textContent = items.filter(it => it.trangThai === 'daxuly').length;
+}
+
+function bindExport(){
+  document.getElementById('btn-export').addEventListener('click', () => {
+    const items = visibleItems().map(it => ({...it, ...computeLevel(it.nsx, it.hsd)}));
+    const rows = [['Tên hàng','Mã SKU','Mã/Barcode','NSX','HSD','Số lượng','Mức','Còn lại (ngày)','Người ghi nhận','Trạng thái','Ghi chú']];
+    items.forEach(it => rows.push([
+      it.ten, it.sku||'', it.ma||'', it.nsx, it.hsd, it.soLuong, it.level, it.daysLeft, it.nhanVienTen,
+      it.trangThai === 'daxuly' ? 'Đã xử lý' : 'Chưa xử lý', it.ghiChu||''
+    ]));
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'bao-cao-hsd.csv'; a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+// ---------- Danh mục hàng hóa (upload + autocomplete) ----------
+function normalizeVN(str){
+  return String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
+}
+
+function bindCatalogUpload(){
+  document.getElementById('catalog-file').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const errEl = document.getElementById('catalog-error');
+    errEl.textContent = '';
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try{
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        if(rows.length < 2){
+          errEl.textContent = 'File không có dữ liệu.';
+          return;
+        }
+        // Tự nhận diện cột "SKU" và "Tên Hàng" theo tên tiêu đề, không phụ thuộc thứ tự cột
+        const headerRow = rows[0].map(h => normalizeVN(String(h || '')));
+        let skuIdx = headerRow.findIndex(h => h === 'sku' || h.includes('ma sku') || h === 'ma hang');
+        let tenIdx = headerRow.findIndex(h => h.includes('ten hang') || h.includes('ten sp') || h === 'ten');
+        if(tenIdx === -1){
+          errEl.textContent = 'Không tìm thấy cột "Tên Hàng" trong file. Kiểm tra lại tiêu đề cột.';
+          return;
+        }
+        const list = [];
+        for(let i = 1; i < rows.length; i++){
+          const r = rows[i];
+          const ten = String(r[tenIdx] ?? '').trim();
+          if(!ten) continue;
+          const sku = skuIdx !== -1 ? String(r[skuIdx] ?? '').trim() : '';
+          list.push({ ten, sku });
+        }
+        if(list.length === 0){
+          errEl.textContent = 'Không đọc được dữ liệu. Kiểm tra lại file.';
+          return;
+        }
+
+        // Loại bỏ dòng trùng mã SKU (hoặc trùng tên nếu không có SKU), giữ lần xuất hiện đầu tiên
+        const seen = new Set();
+        const deduped = [];
+        list.forEach(it => {
+          const key = it.sku ? ('sku:' + it.sku) : ('ten:' + normalizeVN(it.ten));
+          if(seen.has(key)) return;
+          seen.add(key);
+          deduped.push(it);
+        });
+        const removedCount = list.length - deduped.length;
+
+        try{
+          const res = await apiPost('uploadCatalog', { list: deduped });
+          if(!res.ok){ errEl.textContent = 'Tải lên thất bại, thử lại.'; return; }
+          catalogCache = deduped;
+          renderCatalogPreview();
+          showToast(removedCount > 0
+            ? `Đã tải lên ${deduped.length} mặt hàng (đã bỏ ${removedCount} dòng trùng mã).`
+            : `Đã tải lên ${deduped.length} mặt hàng vào danh mục.`);
+        } catch(err){
+          errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL.';
+        }
+      } catch(err){
+        errEl.textContent = 'Không đọc được file. Vui lòng dùng file .xlsx hoặc .csv hợp lệ.';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function renderCatalogPreview(){
+  const list = catalogCache;
+  document.getElementById('catalog-count').textContent = list.length;
+  const wrap = document.getElementById('catalog-preview');
+  if(list.length === 0){
+    wrap.innerHTML = '<div class="empty-state">Chưa có danh mục nào được tải lên.</div>';
+    return;
+  }
+  wrap.innerHTML = list.slice(0, 50).map(it => `
+    <div class="cat-row"><span>${escapeHtml(it.ten)}</span><span class="sku">${escapeHtml(it.sku||'—')}</span></div>
+  `).join('') + (list.length > 50 ? `<div class="hint" style="margin-top:8px;">...và ${list.length - 50} mặt hàng khác</div>` : '');
+}
+
+function bindTenAutocomplete(){
+  const input = document.getElementById('f-ten');
+  const listEl = document.getElementById('f-ten-list');
+  const tagEl = document.getElementById('f-ten-sku-tag');
+
+  input.addEventListener('input', () => {
+    tagEl.innerHTML = '';
+    input.dataset.sku = '';
+    const q = normalizeVN(input.value.trim());
+    if(!q){ listEl.classList.remove('show'); return; }
+    const matches = catalogCache.filter(it => normalizeVN(it.ten).includes(q)).slice(0, 8);
+    if(matches.length === 0){
+      listEl.innerHTML = catalogCache.length === 0
+        ? '<div class="ac-empty">Chưa có danh mục — CHT cần tải lên ở tab "Danh mục".</div>'
+        : '<div class="ac-empty">Không tìm thấy, bạn có thể tự nhập tên.</div>';
+      listEl.classList.add('show');
+      return;
+    }
+    listEl.innerHTML = matches.map((it,i) => `
+      <div class="ac-item" data-idx="${i}" data-ten="${escapeHtml(it.ten)}" data-sku="${escapeHtml(it.sku||'')}">
+        ${escapeHtml(it.ten)}${it.sku ? `<div class="sku">Mã: ${escapeHtml(it.sku)}</div>` : ''}
+      </div>
+    `).join('');
+    listEl.classList.add('show');
+    listEl.querySelectorAll('.ac-item').forEach(el => {
+      el.addEventListener('click', () => {
+        input.value = el.dataset.ten;
+        input.dataset.sku = el.dataset.sku;
+        if(el.dataset.sku) tagEl.innerHTML = `<span class="sku-tag">Mã SKU: ${escapeHtml(el.dataset.sku)}</span>`;
+        listEl.classList.remove('show');
+      });
+    });
+  });
+
+  document.addEventListener('click', (e) => {
+    if(!e.target.closest('.autocomplete-wrap')) listEl.classList.remove('show');
+  });
+}
+
+// ---------- Quản lý nhân viên (chỉ CHT) ----------
+async function refreshUsersCache(){
+  try{ usersCache = await apiGet('getUsers'); if(!Array.isArray(usersCache)) usersCache = []; }
+  catch(err){ usersCache = []; }
+}
+
+function bindUserManagement(){
+  document.getElementById('btn-add-user').addEventListener('click', addNewUser);
+}
+
+async function addNewUser(){
+  const errEl = document.getElementById('user-error');
+  errEl.textContent = '';
+  const manv = document.getElementById('u-manv').value.trim();
+  const pass = document.getElementById('u-pass').value.trim();
+  const ten = document.getElementById('u-ten').value.trim();
+  const vaiTro = document.getElementById('u-vaitro').value;
+  const email = document.getElementById('u-email').value.trim();
+
+  if(!manv || !pass || !ten || !email){
+    errEl.textContent = 'Vui lòng nhập đủ: Mã nhân viên, Mật khẩu, Họ tên, Email.';
+    return;
+  }
+
+  const btn = document.getElementById('btn-add-user');
+  btn.disabled = true; btn.textContent = 'Đang thêm...';
+  try{
+    const res = await apiPost('addUser', { manv, pass, ten, vaiTro, email });
+    if(!res.ok){ errEl.textContent = res.message || 'Thêm thất bại.'; return; }
+    ['u-manv','u-pass','u-ten','u-email'].forEach(id => document.getElementById(id).value = '');
+    await refreshUsersCache();
+    renderUserList();
+    showToast('Đã thêm nhân viên.');
+  } catch(err){
+    errEl.textContent = 'Không kết nối được backend. Kiểm tra lại API_URL.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Thêm nhân viên';
+  }
+}
+
+function renderUserList(){
+  const wrap = document.getElementById('user-list');
+  if(usersCache.length === 0){
+    wrap.innerHTML = '<div class="empty-state">Chưa có nhân viên nào.</div>';
+    return;
+  }
+  wrap.innerHTML = usersCache.map(u => `
+    <div class="cat-row">
+      <span>${escapeHtml(u.ten)}<br><span class="sku">${escapeHtml(u.manv)} · ${u.vaiTro === 'CHT' ? 'Cửa hàng trưởng' : 'Nhân viên'} · ${escapeHtml(u.email||'')}</span></span>
+      <button class="btn-reset-pw" data-manv="${escapeHtml(u.manv)}">Đổi mật khẩu</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.btn-reset-pw').forEach(btn => {
+    btn.addEventListener('click', () => resetUserPassword(btn.dataset.manv));
+  });
+}
+
+async function resetUserPassword(manv){
+  const newPass = prompt(`Nhập mật khẩu mới cho ${manv}:`);
+  if(!newPass) return;
+  try{
+    const res = await apiPost('resetPassword', { manv, newPass });
+    showToast(res.ok ? 'Đã đổi mật khẩu.' : (res.message || 'Đổi mật khẩu thất bại.'));
+  } catch(err){
+    showToast('Không kết nối được backend.');
+  }
+}
+
+// ---------- Tiện ích ----------
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+init();
+</script>
+</body>
+</html>
