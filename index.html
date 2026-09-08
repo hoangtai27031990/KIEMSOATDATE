@@ -817,20 +817,27 @@ function renderList(){
   `;}).join('');
 
   container.querySelectorAll('.mark-done').forEach(btn => {
-    btn.addEventListener('click', () => markDone(btn.dataset.id));
+    btn.addEventListener('click', () => markDone(btn.dataset.id, btn));
   });
 }
 
-async function markDone(id){
+async function markDone(id, btn){
+  const originalText = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Đang xử lý...'; }
   try{
     const res = await apiPost('markDone', { id });
-    if(!res.ok){ showToast(res.message || res.error || 'Không đánh dấu được, thử lại.'); return; }
+    if(!res.ok){
+      showToast(res.message || res.error || 'Không đánh dấu được, thử lại.');
+      if(btn){ btn.disabled = false; btn.textContent = originalText; }
+      return;
+    }
     await refreshItemsCache();
-    renderList();
+    renderList(); // render lại toàn bộ danh sách nên nút sẽ tự chuyển thành "Đã xử lý" (disabled)
     renderReport();
     showToast('Đã đánh dấu xử lý.');
   } catch(err){
     showToast('Không kết nối được backend.');
+    if(btn){ btn.disabled = false; btn.textContent = originalText; }
   }
 }
 
