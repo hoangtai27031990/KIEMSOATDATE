@@ -211,8 +211,36 @@
         <b id="who-name">-</b>
         <span id="who-role">-</span>
       </div>
-      <button id="btn-logout">Đăng xuất</button>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <button id="btn-open-change-pw">Đổi mật khẩu</button>
+        <button id="btn-logout">Đăng xuất</button>
+      </div>
     </header>
+
+    <!-- Modal: Tự đổi mật khẩu -->
+    <div id="change-pw-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:20;
+         align-items:center;justify-content:center;padding:20px;">
+      <div class="card" style="width:100%;max-width:400px;background:var(--surface);">
+        <h2 class="section-title" style="margin-top:0;">Đổi mật khẩu</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label for="cp-old">Mật khẩu hiện tại</label>
+            <input id="cp-old" type="password" autocomplete="current-password">
+          </div>
+          <div class="field">
+            <label for="cp-new">Mật khẩu mới</label>
+            <input id="cp-new" type="password" autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label for="cp-confirm">Xác nhận mật khẩu mới</label>
+            <input id="cp-confirm" type="password" autocomplete="new-password">
+          </div>
+          <div class="error-text" id="change-pw-error"></div>
+          <button class="btn btn-primary" id="btn-submit-change-pw">Đổi mật khẩu</button>
+          <button class="btn btn-ghost" id="btn-cancel-change-pw">Hủy</button>
+        </div>
+      </div>
+    </div>
 
     <main>
       <!-- TAB: Ghi nhận -->
@@ -473,6 +501,7 @@ function init(){
   bindCatalogUpload();
   bindTenAutocomplete();
   bindUserManagement();
+  bindChangePassword();
   const s = getSession();
   if(s){ currentUser = s; enterApp(); }
 }
@@ -1056,6 +1085,58 @@ async function resetUserPassword(manv){
   } catch(err){
     showToast('Không kết nối được backend.');
   }
+}
+
+// ---------- Tự đổi mật khẩu (mọi vai trò) ----------
+function bindChangePassword(){
+  const overlay = document.getElementById('change-pw-overlay');
+  const errEl = document.getElementById('change-pw-error');
+
+  function openModal(){
+    ['cp-old','cp-new','cp-confirm'].forEach(id => document.getElementById(id).value = '');
+    errEl.textContent = '';
+    overlay.style.display = 'flex';
+  }
+  function closeModal(){
+    overlay.style.display = 'none';
+  }
+
+  document.getElementById('btn-open-change-pw').addEventListener('click', openModal);
+  document.getElementById('btn-cancel-change-pw').addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) closeModal(); });
+
+  document.getElementById('btn-submit-change-pw').addEventListener('click', async () => {
+    const oldPass = document.getElementById('cp-old').value;
+    const newPass = document.getElementById('cp-new').value;
+    const confirmPass = document.getElementById('cp-confirm').value;
+    errEl.textContent = '';
+
+    if(!oldPass || !newPass || !confirmPass){
+      errEl.textContent = 'Vui lòng nhập đủ các trường.';
+      return;
+    }
+    if(newPass !== confirmPass){
+      errEl.textContent = 'Mật khẩu mới nhập lại không khớp.';
+      return;
+    }
+    if(newPass.length < 4){
+      errEl.textContent = 'Mật khẩu mới cần ít nhất 4 ký tự.';
+      return;
+    }
+
+    const btn = document.getElementById('btn-submit-change-pw');
+    btn.disabled = true; btn.textContent = 'Đang đổi...';
+    try{
+      const res = await apiPost('changeOwnPassword', { oldPass, newPass });
+      if(!res.ok){ errEl.textContent = res.message || res.error || 'Đổi mật khẩu thất bại.'; return; }
+      closeModal();
+      showToast('Đã đổi mật khẩu thành công.');
+    } catch(err){
+      errEl.textContent = 'Không kết nối được backend.';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Đổi mật khẩu';
+    }
+  });
 }
 
 // ---------- Tiện ích ----------
