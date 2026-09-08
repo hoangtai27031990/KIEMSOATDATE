@@ -881,9 +881,11 @@ function renderReport(){
 function bindExport(){
   document.getElementById('btn-export').addEventListener('click', () => {
     const items = visibleItems().map(it => ({...it, ...computeLevel(it.nsx, it.hsd)}));
-    const rows = [['Tên hàng','Mã SKU','Mã/Barcode','NSX','HSD','Số lượng','Mức','Còn lại (ngày)','Người ghi nhận','Trạng thái','Ghi chú']];
+    const rows = [['Tên hàng','Mã SKU','Mã/Barcode','NSX','HSD','Mốc 30%','Mốc 20%','Số lượng','Mức','Còn lại (ngày)','Người ghi nhận','Trạng thái','Ghi chú']];
     items.forEach(it => rows.push([
-      it.ten, it.sku||'', it.ma||'', it.nsx, it.hsd, it.soLuong, it.level, it.daysLeft, it.nhanVienTen,
+      it.ten, it.sku||'', it.ma||'', it.nsx, it.hsd,
+      it.moc30 ? fmt(it.moc30) : '', it.moc20 ? fmt(it.moc20) : '',
+      it.soLuong, it.level, it.daysLeft, it.nhanVienTen,
       it.trangThai === 'daxuly' ? 'Đã xử lý' : 'Chưa xử lý', it.ghiChu||''
     ]));
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
