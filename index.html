@@ -249,8 +249,8 @@
     </div>
     <div class="form-grid">
       <div class="field">
-        <label for="login-manv">Mã nhân viên</label>
-        <input id="login-manv" placeholder="VD: NV0123" autocomplete="username">
+        <label for="login-manv">Tài khoản</label>
+        <input id="login-manv" placeholder="Tài khoản" autocomplete="username">
       </div>
       <div class="field">
         <label for="login-pass">Mật khẩu</label>
@@ -429,7 +429,7 @@
         <div class="card" style="margin-bottom:14px;">
           <div class="form-grid">
             <div class="row2">
-              <div class="field"><label for="u-manv">Mã nhân viên</label><input id="u-manv" placeholder="VD: NV02"></div>
+              <div class="field"><label for="u-manv">Tài khoản</label><input id="u-manv" placeholder="VD: NV02"></div>
               <div class="field"><label for="u-pass">Mật khẩu</label><input id="u-pass" placeholder="Đặt mật khẩu"></div>
             </div>
             <div class="field"><label for="u-ten">Họ tên</label><input id="u-ten" placeholder="Họ tên nhân viên"></div>
@@ -464,7 +464,7 @@
     </main>
 
     <nav class="tabbar">
-      <button class="tab-btn active" data-tab="tab-scan"><span class="dot"></span>Ghi nhận</button>
+      <button class="tab-btn active" data-tab="tab-scan"><span class="dot"></span>Nhập liệu</button>
       <button class="tab-btn" data-tab="tab-list"><span class="dot"></span>Danh sách</button>
       <button class="tab-btn" data-tab="tab-catalog" id="nav-btn-catalog"><span class="dot"></span>Danh mục</button>
       <button class="tab-btn" data-tab="tab-report"><span class="dot"></span>Báo cáo</button>
@@ -607,7 +607,7 @@ function bindLogin(){
     const pass = document.getElementById('login-pass').value;
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
-    if(!manv || !pass){ errEl.textContent = 'Vui lòng nhập mã nhân viên và mật khẩu.'; return; }
+    if(!manv || !pass){ errEl.textContent = 'Vui lòng nhập tài khoản và mật khẩu.'; return; }
     const btn = document.getElementById('btn-login');
     btn.disabled = true; btn.textContent = 'Đang đăng nhập...';
     try{
@@ -1463,7 +1463,7 @@ async function addNewUser(){
   const email = document.getElementById('u-email').value.trim();
 
   if(!manv || !pass || !ten){
-    errEl.textContent = 'Vui lòng nhập đủ: Mã nhân viên, Mật khẩu, Họ tên.';
+    errEl.textContent = 'Vui lòng nhập đủ: Tài khoản, Mật khẩu, Họ tên.';
     return;
   }
   // Chỉ CHT mới cần email (để nhận cảnh báo HSD) — NV không còn nhận email nữa.
