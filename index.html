@@ -172,16 +172,27 @@
   .mini-track{position:relative;height:6px;border-radius:4px;margin-top:10px;
     background:linear-gradient(to right, var(--xanh) 0%, var(--xanh) 50%, var(--vang) 50%, var(--vang) 75%, var(--do) 75%, var(--do) 100%);}
   .mini-today{position:absolute;top:-3px;width:2px;height:12px;background:var(--ink);border-radius:1px;}
-  .item-actions{display:flex;gap:8px;margin-top:10px;}
-  .item-actions button{flex:1;padding:11px;min-height:42px;font-size:13px;border-radius:8px;border:1px solid var(--line);
+  .item-actions{display:flex;gap:6px;margin-top:10px;align-items:stretch;}
+  .item-actions .btn-icon{flex:0 0 38px;width:38px;padding:0;font-size:15px;line-height:1;
+    display:flex;align-items:center;justify-content:center;min-height:38px;border-radius:8px;
+    border:1px solid var(--line);background:var(--bg);color:var(--ink-soft);cursor:pointer;}
+  .item-actions .btn-icon.btn-delete{border-color:var(--do);color:var(--do);}
+  .item-actions button.mark-done, .item-actions button.undo-done{flex:1;min-width:0;padding:8px 6px;
+    min-height:38px;font-size:12.5px;border-radius:8px;border:1px solid var(--line);
     background:var(--bg);color:var(--ink);cursor:pointer;}
   .item-actions button.mark-done{border-color:var(--accent);color:var(--accent);}
   .item-actions button.undo-done{border-color:var(--vang);color:var(--vang);}
-  .item-actions-secondary{display:flex;gap:8px;margin-top:8px;}
-  .item-actions-secondary button{flex:1;padding:9px;min-height:40px;font-size:12.5px;border-radius:8px;
-    border:1px solid var(--line);background:var(--bg);color:var(--ink-soft);cursor:pointer;}
-  .item-actions-secondary button.btn-delete{border-color:var(--do);color:var(--do);}
   .empty-state{text-align:center;color:var(--ink-soft);font-size:13.5px;padding:40px 20px;}
+
+  @media (max-width:360px){
+    .item{padding:12px;}
+    .item-name{font-size:14px;}
+    .item-meta{font-size:12px;}
+    .badge{font-size:10px;padding:2px 7px;}
+    .item-actions{gap:5px;}
+    .item-actions .btn-icon{flex-basis:34px;width:34px;font-size:14px;min-height:36px;}
+    .item-actions button.mark-done, .item-actions button.undo-done{font-size:11.5px;padding:7px 4px;min-height:36px;}
+  }
 
   /* ---- Report ---- */
   .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
@@ -1112,12 +1123,11 @@ function renderList(){
         ${it.ghiChu ? '<br>Ghi chú: ' + escapeHtml(it.ghiChu) : ''}
       </div>
       <div class="mini-track"><div class="mini-today" style="left:${pct}%;"></div></div>
-      ${it.trangThai !== 'daxuly' ? `
-      <div class="item-actions-secondary">
-        <button class="btn-edit" data-id="${it.id}">Sửa</button>
-        <button class="btn-delete" data-id="${it.id}">Xóa</button>
-      </div>` : ''}
       <div class="item-actions">
+        ${it.trangThai !== 'daxuly' ? `
+        <button class="btn-icon btn-edit" data-id="${it.id}" aria-label="Sửa" title="Sửa">✎</button>
+        <button class="btn-icon btn-delete" data-id="${it.id}" aria-label="Xóa" title="Xóa">🗑</button>
+        ` : ''}
         ${it.trangThai !== 'daxuly'
           ? `<button class="mark-done" data-id="${it.id}">Đánh dấu đã xử lý</button>`
           : `<button class="undo-done" data-id="${it.id}">Hoàn tác (đã xử lý)</button>`}
