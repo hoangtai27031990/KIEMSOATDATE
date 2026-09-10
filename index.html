@@ -134,11 +134,13 @@
   .dt-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);margin-bottom:6px;}
   .dt-labels b{color:var(--ink);font-weight:600;}
   .dt-track{position:relative;height:8px;border-radius:6px;overflow:visible;
-    background:linear-gradient(to right, var(--xanh) 0%, var(--xanh) 50%, var(--vang) 50%, var(--vang) 75%, var(--do) 75%, var(--do) 100%);}
+    background:linear-gradient(to right, var(--xanh) 0%, var(--xanh) 70%, var(--vang) 70%, var(--vang) 80%, var(--do) 80%, var(--do) 100%);}
   .dt-today{position:absolute;top:-4px;width:2px;height:16px;background:var(--ink);}
   .dt-today::after{content:'Hôm nay';position:absolute;top:-16px;left:50%;transform:translateX(-50%);
     font-size:10px;color:var(--ink);white-space:nowrap;font-weight:600;}
-  .dt-legend{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-soft);margin-top:10px;}
+  .dt-legend{position:relative;height:13px;margin-top:8px;}
+  .dt-leg-item{position:absolute;top:0;font-size:10px;color:var(--ink-soft);white-space:nowrap;transform:translateX(-50%);}
+  .dt-leg-item:first-child{transform:translateX(0);}
   .dt-result{text-align:center;font-size:12.5px;font-weight:600;margin-top:6px;}
   .dt-result.xanh{color:var(--xanh);} .dt-result.vang{color:var(--vang);} .dt-result.do{color:var(--do);}
 
@@ -170,7 +172,7 @@
   .badge.xanh{background:var(--xanh-bg);color:var(--xanh);}
   .item-meta{font-size:13px;color:var(--ink-soft);margin-top:4px;line-height:1.6;}
   .mini-track{position:relative;height:6px;border-radius:4px;margin-top:10px;
-    background:linear-gradient(to right, var(--xanh) 0%, var(--xanh) 50%, var(--vang) 50%, var(--vang) 75%, var(--do) 75%, var(--do) 100%);}
+    background:linear-gradient(to right, var(--xanh) 0%, var(--xanh) 70%, var(--vang) 70%, var(--vang) 80%, var(--do) 80%, var(--do) 100%);}
   .mini-today{position:absolute;top:-3px;width:2px;height:12px;background:var(--ink);border-radius:1px;}
   .item-actions{display:flex;gap:6px;margin-top:10px;align-items:stretch;}
   .item-actions .btn-icon{flex:0 0 38px;width:38px;padding:0;font-size:15px;line-height:1;
@@ -771,7 +773,11 @@ function renderTimeline(el, nsx, hsd){
   el.innerHTML = `
     <div class="dt-labels"><span>NSX<br><b>${fmt(nsxD)}</b></span><span style="text-align:right;">HSD<br><b>${fmt(hsdD)}</b></span></div>
     <div class="dt-track"><div class="dt-today" style="left:${pct}%;"></div></div>
-    <div class="dt-legend"><span>Còn xa</span><span>Mốc 30%</span><span>Mốc 20%</span></div>
+    <div class="dt-legend">
+      <span class="dt-leg-item" style="left:0%;">Còn xa</span>
+      <span class="dt-leg-item" style="left:70%;">Mốc 30%</span>
+      <span class="dt-leg-item" style="left:80%;">Mốc 20%</span>
+    </div>
     <div class="dt-result ${info.level}">${resultText[info.level]} — còn ${info.daysLeft} ngày</div>
   `;
 }
