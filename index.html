@@ -1125,6 +1125,9 @@ function renderList(){
       </div>
       <div class="item-meta">
         SL: ${it.soLuong} &nbsp;•&nbsp; NSX: ${fmt(nsxD)} &nbsp;•&nbsp; HSD: ${fmt(hsdD)}<br>
+        <span style="color:var(--vang);font-weight:600;">Mốc 30%: ${it.moc30 ? fmt(it.moc30) : '-'}</span>
+        &nbsp;•&nbsp;
+        <span style="color:var(--do);font-weight:600;">Mốc 20%: ${it.moc20 ? fmt(it.moc20) : '-'}</span><br>
         Còn lại: ${it.daysLeft} ngày &nbsp;•&nbsp; Người ghi nhận: ${escapeHtml(it.nhanVienTen)}
         ${it.ghiChu ? '<br>Ghi chú: ' + escapeHtml(it.ghiChu) : ''}
       </div>
